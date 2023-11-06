@@ -1,0 +1,857 @@
+float va_val = poc_val
+int vahind = poc_loc
+int valind = poc_loc
+if newbar
+    for x = 1 to 20
+        if va_val >= total * percent
+            break
+        [ind, chval] = get_index(vahind + 1, valind - 1)
+        if chval == 0
+            break
+        if ind == vahind + 1
+            vahind := ind
+            va_val := va_val + chval
+        else
+            valind := ind
+            va_val := va_val + chval
+
+get_middle(x)=>
+    float ret = (lowest + (x-1) * channel + lowest + x * channel) / 2
+
+get_base(x)=>
+    float ret = (lowest + (x-1) * channel)
+
+var int bartime = na
+bartime := na(bartime) ? time - time[1] : min(bartime, time - time[1])
+draw_mp(y, chval, is_va)=>
+    rchval = round(srate * chval)
+    linecol = is_va ? vah_col : nonva_col
+    ret = line.new(x1 = bar_index, y1 = y, x2 = bar_index + rchval, y2 = y, color = linecol, width = linewdth)
+
+draw_mpd(y1_, y2_, chval, is_va)=>
+    rchval = round(srate * chval)
+    linecol = is_va ? vah_col : nonva_col
+    ret = line.new(x1 = bar_index + rchval, y1 = y1_, x2 = bar_index + rchval, y2 = y2_, color = linecol, width = linewdth)
+    
+var float midpoc = na
+var all_lines = array.new_line(0)
+if newbar
+    if keepoldmp and array.size(all_lines) > 0
+        line.set_x2(array.get(all_lines, array.size(all_lines) - 1), bar_index - 1)
+        line.set_extend(array.get(all_lines, array.size(all_lines) - 1), extend = extend.none)
+        array.clear(all_lines)
+    if not keepoldmp
+        for x = 0 to (array.size(all_lines) > 0 ? array.size(all_lines)  - 1 : na)
+            line.delete(array.pop(all_lines))
+    
+    if showwhat == "Show Value Area High" or showwhat == "Show All Channels"
+        str = showwhat == "Show All Channels" ? 1 : valind
+        end = showwhat == "Show All Channels" ? 20 : vahind
+        for x = str to end
+            is_va = x >= valind and x <= vahind
+            is_poc = x == poc_loc
+            int lwdhm = int(array.get(ch, x))
+            int lwdh = lwdhm
+            if x > str 
+                int mytmp = int(array.get(ch, x - 1))
+                if mytmp > lwdh
+                    lwdh := mytmp
+                    is_va := x - 1 >= valind and x - 1<= vahind
+            array.push(all_lines, draw_mp(get_base(x), lwdh, is_va))
+            
+            is_va := x >= valind and x <= vahind
+            array.push(all_lines, draw_mpd(get_base(x), get_base(x + 1), lwdhm, is_va))
+            
+        array.push(all_lines, draw_mp(get_base(end + 1), int(array.get(ch, end)), end >= valind and end <= vahind))
+    
+    if showpocline
+        midpoc := get_middle(poc_loc)
+        array.push(all_lines, line.new(x1 = bar_index, y1 = midpoc, x2 = bar_index + 1, y2 = get_middle(poc_loc), color = poc_col, width = linewdth, extend = extend.right))
+
+price_in_poc = close >= get_base(gl_poc_loc + 0) and close <= get_base(gl_poc_loc + 1)
+price_above_poc = close > get_base(gl_poc_loc + 1)
+price_below_poc = close <= get_base(gl_poc_loc + 0)
+
+alertcondition(price_in_poc , title='Price in POC', message='Price in POC')
+alertcondition((price_in_poc[1] or price_below_poc[1]) and price_above_poc, title='Price went above POC', message='Price went above POC')
+alertcondition((price_in_poc[1] or price_above_poc[1]) and price_below_poc, title='Price went below POC', message='Price went below POC')
+
+
+
+//This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+//@version=4
+//Author = https://www.tradingview.com/u/Dustin_D_RLT/
+//Donchian Dip Strategy
+strategy(title="Donchian Dip Strategy", shorttitle = "DD", overlay = true, calc_on_every_tick=false, default_qty_value = 100, initial_capital = 100000, default_qty_type = strategy.fixed, pyramiding = 0, process_orders_on_close=true)
+//creates a time filter to prevent "too many orders error" and allows user to see Strategy results per year by changing input in settings in Stratey Tester
+startDay = input(1, title="Start Day", minval=1, maxval=31, step=1)
+startMonth = input(1, title="Start Month", minval=1, maxval=12, step=1)
+startYear = input(2009, title="Start Year", minval=1980, step=1)
+endDay = input(31, title="End Day", minval=1, maxval=31, step=1)
+endMonth = input(12, title="End Month", minval=1, maxval=12, step=1)
+endYear = input(2050, title="End Year", minval=1980, step=1)
+timeFilter = (year >= startYear) and (month >= startMonth) and (dayofmonth >= startDay) and (year <= endYear) and (month <= endMonth) and (dayofmonth <= endDay)
+//Donchian Channel
+lengthDC = input(3, minval=1, title="Donchian Length")
+lowerDC = lowest(lengthDC)
+upperDC = highest(lengthDC)
+offset_bar = input(1, minval=0, title ="Donchian Offset")
+basis = avg(upperDC, lowerDC)
+u = plot(upperDC, "Upper DC", color=#0094FF, offset=1)
+l = plot(lowerDC, "Lower DC", color=#0094FF, offset=1)
+fill(u, l, color=#0094FF, transp=97, title="Background")
+//Bollinger Bands
+lengthBB = input(20, minval=1, title="Bollinger Length")
+src = input(close, title="Bollinger Source")
+mult = input(2.0, minval=0.001, maxval=50, title="Bollinger StdDev")
+basisBB = sma(src, lengthBB)
+dev = mult * stdev(src, lengthBB)
+upperBB = basisBB + dev
+lowerBB = basisBB - dev
+offset = input(0, "Bollinger Offset", type = input.integer, minval = -500, maxval = 500)
+plot(basisBB, "Basis", color=color.navy, offset = offset)
+p1 = plot(upperBB, "Upper BB", color=color.navy, offset = offset)
+p2 = plot(lowerBB, "Lower BB", color=color.navy, offset = offset)
+fill(p1, p2, title = "Background", color=#198787, transp=98)
+//ATR for Stops
+atrValue = (rma(tr(true), length=14))
+atrMult = input(2.0, minval=1.0, title="Stop ATR Multiple", step=.25)
+//Intitial ATR Multiple Stop Location
+initialStop = (high - (atrValue * atrMult))
+//Entry Signals
+blueSignal = (timeFilter and strategy.position_size <= 0 and (close[1] < lowerDC[2] and close > lowerBB and close > lowerDC[1] and close > open and close[1] < basisBB[1]) or timeFilter and strategy.position_size <= 0 and (close[2] < lowerDC[3] and close[1] > lowerDC[2] and close > lowerDC[1] and close[1] < open[1] and close > open and close[2] < basisBB[2]))
+greenSignal = (timeFilter and strategy.position_size <= 0 and (low[1] < lowerBB[1] and close[1] < lowerDC[2] and close > lowerDC[1] and close > open and close < basisBB) or timeFilter and strategy.position_size <= 0 and (low[2] < lowerBB[2] and close[2] < lowerDC[3] and close[1] > lowerDC[2] and close > lowerDC[1] and close[1] < open[1] and close > open and close < basisBB))
+plotshape(blueSignal, "Blue Entry", style=shape.triangleup, location=location.belowbar, color=color.blue, size=size.small)
+plotshape(greenSignal, "Green Entry", style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small)
+//Trailing Stops
+highWave = ((high - low) > atrValue and close > open and (high - low) > 5*(close - open)) or (close < open and (high - low) > 5*(open - close)) or (close == open)
+trailStop = (greenSignal or blueSignal ? initialStop : (low > upperBB and low > upperDC[1] and highWave) ? low : (close > upperBB) ? lowerDC[1] : (close > upperDC[1]) ? lowerDC[2] : na)
+plot(trailStop, "Trailing Stop", linewidth=4, color=color.purple, style=plot.style_circles)
+//Holds value of trailStop
+tS = valuewhen((trailStop and timeFilter), trailStop, 0)
+plot(tS, title="Stop", linewidth=2, color=color.red)
+//Optional Targets
+target1 = input(1.0, minval=1.0, step=.25, title="Targert 1 Multiple")
+target2 = input(2.0, minval=1.0, step=.25, title="Targert 2 Multiple")
+target3 = input(3.0, minval=1.0, step=.25, title="Targert 3 Multiple")
+target4 = input(4.0, minval=1.0, step=.25, title="Targert 4 Multiple")
+target5 = input(5.0, minval=1.0, step=.25, title="Targert 5 Multiple")
+t1 = close + ((close - initialStop) * target1)
+t2 = close + ((close - initialStop) * target2)
+t3 = close + ((close - initialStop) * target3)
+t4 = close + ((close - initialStop) * target4)
+t5 = close + ((close - initialStop) * target5)
+plot(greenSignal or blueSignal ? t1 : na, "Target 1", linewidth=3, color=color.green, style=plot.style_linebr)
+plot(greenSignal or blueSignal ? t2 : na, "Target 2", linewidth=3, color=color.green, style=plot.style_linebr)
+plot(greenSignal or blueSignal ? t3 : na, "Target 3", linewidth=3, color=color.green, style=plot.style_linebr)
+plot(greenSignal or blueSignal ? t4 : na, "Target 4", linewidth=3, color=color.green, style=plot.style_linebr)
+plot(greenSignal or blueSignal ? t5 : na, "Target 5", linewidth=3, color=color.green, style=plot.style_linebr)
+//Position Size
+positionSize = strategy.equity/close
+//Entry Order
+strategy.order("Entry", long = true, qty = positionSize, when = (strategy.position_size <= 0 and timeFilter and (greenSignal or blueSignal)))
+strategy.order("Trailing Stop", false, qty = strategy.position_size, stop=tS, when = timeFilter, comment = "Trailing Stop")
+
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Peter_O
+
+//@version=5
+strategy('Joint Conditions Strategy Suite + TradingConnector alerts bot'
+	 , shorttitle='JCSS+TradingConnector bot'
+	 , overlay=true
+	 , margin_long=100
+	 , margin_short=100
+	 , close_entries_rule='ANY'
+	 , default_qty_type=strategy.fixed
+	 , default_qty_value=100
+	 , commission_type=strategy.commission.cash_per_order
+	 , commission_value=0.0003)
+import Peter_O/MTFindicators/8 as MTFLIBRARY
+
+var string tooltipValue = '4th field is used only if \'value\' is selected in the 3rd dropdown. '
+						 + 'Otherwise it is ignored and value of indicator selected in 3rd dropdown is used. '
+var string tooltipCustomIndicator = 'Custom indicator or series has to be selected here, so you can use it entry conditions dropdowns.'
+						 + 'Read this script description to see example use.'
+var string tooltipMTF = 'MTF is timeframe multiplayer. '
+						 + 'For example, it you want to use RSI from 4h chart, being on 1h chart, you should enter 4 here. '
+						 + 'This refers to all MTF parameters in this section.'
+var string tooltipKeltner = 'Keltner Channels settings: Basis Length, ATR Length, Multiplier, MTF x. Sorry, didn\'t fit in single line :)'
+var string tooltipMACD = 'MACD settings: Fast Length, Slow Length, Signal Length, MTF x. Sorry, didn\'t fit in single line :)'
+
+//------------------------------------------------------------------------------
+
+var string longEntryGroup = 'Long Entry - when all conditions are jointly true/skipped'
+var string shortEntryGroup = 'Short Entry - when all conditions are jointly true/skipped'
+
+var string CrossingUpOption = 'Crossing Up'
+var string CrossingDownOption = 'Crossing Down'
+var string GreaterThanOption = 'Greater Than'
+var string LessThanOption = 'Less Than'
+
+var string skipOption = '...SKIP...'
+var string openOption = 'open'
+var string highOption = 'high'
+var string lowOption = 'low'
+var string closeOption = 'close'
+var string ohlc4Option = 'ohlc4'
+var string valueOption = 'value'
+var string rsiAOption = 'rsiA'
+var string rsiBOption = 'rsiB'
+var string rsiCOption = 'rsiC'
+var string maAOption = 'maA (Moving Average A)'
+var string maBOption = 'maB (Moving Average B)'
+var string maCOption = 'maC (Moving Average C)'
+var string adxOption = 'ADX'
+var string diPlusOption = 'DI-Plus'
+var string diMinusOption = 'DI-Minus'
+var string stochKOption = 'Stoch%K'
+var string stochDOption = 'Stoch%D'
+var string bbBasisOption = 'Basis Bollinger Band'
+var string bbUpperOption = 'Upper Bollinger Band'
+var string bbLowerOption = 'Lower Bollinger Band'
+var string kcUpperOption = 'Upper Keltner Channel Band'
+var string kcLowerOption = 'Lower Keltner Channel Band'
+var string macdOption = 'MACD'
+var string macdSignalOption = 'MACD Signal'
+var string macdHistOption = 'MACD Histogram'
+var string volumeOption = 'volume'
+var string volumeMAOption = 'volumeMA'
+var string customIndicatorOption = 'custom indicator'
+
+longIndicatorSelector1 = input.string(defval=maBOption,
+		 options=[skipOption, openOption, highOption, lowOption, closeOption, ohlc4Option, rsiAOption, rsiBOption, rsiCOption, maAOption, maBOption, maCOption, adxOption, diPlusOption, diMinusOption, stochKOption, stochDOption, bbBasisOption, bbUpperOption, bbLowerOption, kcUpperOption, kcLowerOption, macdOption, macdSignalOption, macdHistOption, volumeOption, volumeMAOption, customIndicatorOption],
+		 title='', inline='cond1long', group=longEntryGroup)
+longConditionTrigger1 = input.string(defval=CrossingUpOption,
+		 options=[CrossingUpOption, CrossingDownOption, GreaterThanOption, LessThanOption],
+		 title='', inline='cond1long', group=longEntryGroup)
+longLevelSelector1 = input.string(defval=maCOption,
+		 options=[valueOption, rsiAOption, rsiBOption, rsiCOption, maAOption, maBOption, maCOption, adxOption, diPlusOption, diMinusOption, stochKOption, stochDOption, bbBasisOption, bbUpperOption, bbLowerOption, kcUpperOption, kcLowerOption, macdOption, macdSignalOption, macdHistOption, volumeOption, volumeMAOption, customIndicatorOption],
+		 title='', inline='cond1long', group=longEntryGroup)
+longLevelValue1 = input.float(defval=0.00, title='', inline='cond1long', group=longEntryGroup, tooltip=tooltipValue)
+
+//------------------------------------------------------------------------------
+
+longIndicatorSelector2 = input.string(defval=macdHistOption,
+		 options=[skipOption, openOption, highOption, lowOption, closeOption, ohlc4Option, rsiAOption, rsiBOption, rsiCOption, maAOption, maBOption, maCOption, adxOption, diPlusOption, diMinusOption, stochKOption, stochDOption, bbBasisOption, bbUpperOption, bbLowerOption, kcUpperOption, kcLowerOption, macdOption, macdSignalOption, macdHistOption, volumeOption, volumeMAOption, customIndicatorOption],
+		 title='and', inline='cond2long', group=longEntryGroup)
+longConditionTrigger2 = input.string(defval=GreaterThanOption,
+		 options=[CrossingUpOption, CrossingDownOption, GreaterThanOption, LessThanOption],
+		 title='', inline='cond2long', group=longEntryGroup)
+longLevelSelector2 = input.string(defval=valueOption,
+		 options=[valueOption, rsiAOption, rsiBOption, rsiCOption, maAOption, maBOption, maCOption, adxOption, diPlusOption, diMinusOption, stochKOption, stochDOption, bbBasisOption, bbUpperOption, bbLowerOption, kcUpperOption, kcLowerOption, macdOption, macdSignalOption, macdHistOption, volumeOption, volumeMAOption, customIndicatorOption],
+		 title='', inline='cond2long', group=longEntryGroup)
+longLevelValue2 = input.float(defval=0.00, title='', inline='cond2long', group=longEntryGroup)
+
+//------------------------------------------------------------------------------
+
+longIndicatorSelector3 = input.string(defval=adxOption,
+		 options=[skipOption, openOption, highOption, lowOption, closeOption, ohlc4Option, rsiAOption, rsiBOption, rsiCOption, maAOption, maBOption, maCOption, adxOption, diPlusOption, diMinusOption, stochKOption, stochDOption, bbBasisOption, bbUpperOption, bbLowerOption, kcUpperOption, kcLowerOption, macdOption, macdSignalOption, macdHistOption, volumeOption, volumeMAOption, customIndicatorOption],
+		 title='and', inline='cond3long', group=longEntryGroup)
+longConditionTrigger3 = input.string(defval=GreaterThanOption,
+		 options=[CrossingUpOption, CrossingDownOption, GreaterThanOption, LessThanOption],
+		 title='', inline='cond3long', group=longEntryGroup)
+longLevelSelector3 = input.string(defval=valueOption,
+		 options=[valueOption, rsiAOption, rsiBOption, rsiCOption, maAOption, maBOption, maCOption, adxOption, diPlusOption, diMinusOption, stochKOption, stochDOption, bbBasisOption, bbUpperOption, bbLowerOption, kcUpperOption, kcLowerOption, macdOption, macdSignalOption, macdHistOption, volumeOption, volumeMAOption, customIndicatorOption],
+		 title='', inline='cond3long', group=longEntryGroup)
+longLevelValue3 = input.float(defval=25.00, title='', inline='cond3long', group=longEntryGroup)
+
+//------------------------------------------------------------------------------
+
+shortIndicatorSelector1 = input.string(defval=maBOption,
+		 options=[skipOption, openOption, highOption, lowOption, closeOption, ohlc4Option, rsiAOption, rsiBOption, rsiCOption, maAOption, maBOption, maCOption, adxOption, diPlusOption, diMinusOption, stochKOption, stochDOption, bbBasisOption, bbUpperOption, bbLowerOption, kcUpperOption, kcLowerOption, macdOption, macdSignalOption, macdHistOption, volumeOption, volumeMAOption, customIndicatorOption],
+		 title='', inline='cond1short', group=shortEntryGroup)
+shortConditionTrigger1 = input.string(defval=CrossingDownOption,
+		 options=[CrossingUpOption, CrossingDownOption, GreaterThanOption, LessThanOption],
+		 title='', inline='cond1short', group=shortEntryGroup)
+shortLevelSelector1 = input.string(defval=maCOption,
+		 options=[valueOption, rsiAOption, rsiBOption, rsiCOption, maAOption, maBOption, maCOption, adxOption, diPlusOption, diMinusOption, stochKOption, stochDOption, bbBasisOption, bbUpperOption, bbLowerOption, kcUpperOption, kcLowerOption, macdOption, macdSignalOption, macdHistOption, volumeOption, volumeMAOption, customIndicatorOption],
+		 title='', inline='cond1short', group=shortEntryGroup)
+shortLevelValue1 = input.float(defval=0.00, title='', inline='cond1short', group=shortEntryGroup)
+
+//------------------------------------------------------------------------------
+
+shortIndicatorSelector2 = input.string(defval=macdHistOption,
+		 options=[skipOption, openOption, highOption, lowOption, closeOption, ohlc4Option, rsiAOption, rsiBOption, rsiCOption, maAOption, maBOption, maCOption, adxOption, diPlusOption, diMinusOption, stochKOption, stochDOption, bbBasisOption, bbUpperOption, bbLowerOption, kcUpperOption, kcLowerOption, macdOption, macdSignalOption, macdHistOption, volumeOption, volumeMAOption, customIndicatorOption],
+		 title='and', inline='cond2short', group=shortEntryGroup)
+shortConditionTrigger2 = input.string(defval=LessThanOption,
+		 options=[CrossingUpOption, CrossingDownOption, GreaterThanOption, LessThanOption],
+		 title='', inline='cond2short', group=shortEntryGroup)
+shortLevelSelector2 = input.string(defval=valueOption,
+		 options=[valueOption, rsiAOption, rsiBOption, rsiCOption, maAOption, maBOption, maCOption, adxOption, diPlusOption, diMinusOption, stochKOption, stochDOption, bbBasisOption, bbUpperOption, bbLowerOption, kcUpperOption, kcLowerOption, macdOption, macdSignalOption, macdHistOption, volumeOption, volumeMAOption, customIndicatorOption],
+		 title='', inline='cond2short', group=shortEntryGroup)
+shortLevelValue2 = input.float(defval=0.00, title='', inline='cond2short', group=shortEntryGroup)
+
+//------------------------------------------------------------------------------
+
+shortIndicatorSelector3 = input.string(defval=adxOption,
+		 options=[skipOption, openOption, highOption, lowOption, closeOption, ohlc4Option, rsiAOption, rsiBOption, rsiCOption, maAOption, maBOption, maCOption, adxOption, diPlusOption, diMinusOption, stochKOption, stochDOption, bbBasisOption, bbUpperOption, bbLowerOption, kcUpperOption, kcLowerOption, macdOption, macdSignalOption, macdHistOption, volumeOption, volumeMAOption, customIndicatorOption],
+		 title='and', inline='cond3short', group=shortEntryGroup)
+shortConditionTrigger3 = input.string(defval=GreaterThanOption,
+		 options=[CrossingUpOption, CrossingDownOption, GreaterThanOption, LessThanOption],
+		 title='', inline='cond3short', group=shortEntryGroup)
+shortLevelSelector3 = input.string(defval=valueOption,
+		 options=[valueOption, rsiAOption, rsiBOption, rsiCOption, maAOption, maBOption, maCOption, adxOption, diPlusOption, diMinusOption, stochKOption, stochDOption, bbBasisOption, bbUpperOption, bbLowerOption, kcUpperOption, kcLowerOption, macdOption, macdSignalOption, macdHistOption, volumeOption, volumeMAOption, customIndicatorOption],
+		 title='', inline='cond3short', group=shortEntryGroup)
+shortLevelValue3 = input.float(defval=25.00, title='', inline='cond3short', group=shortEntryGroup)
+
+//------------------------------------------------------------------------------
+
+var string exitSettingsGroup = 'Exit settings'
+var string bracketPercent = 'Percent'
+var string bracketATR = 'ATR'
+var string bracketPoints = 'Points'
+
+tpType = input.string(title='Take profit type', defval=bracketPoints, options=[bracketPercent, bracketATR, bracketPoints], inline='takeprofit', group=exitSettingsGroup)
+tpValue = input.float(title='Take profit', step=0.1, minval=0.1, defval=100, inline='takeprofit', group=exitSettingsGroup)
+slType = input.string(title='Stop Loss type', defval=bracketPoints, options=[bracketPercent, bracketATR, bracketPoints], inline='stoploss', group=exitSettingsGroup)
+slValue = input.float(title='Stop Loss', step=0.1, minval=0.1, defval=100, inline='stoploss', group=exitSettingsGroup)
+enableTrailing = input.bool(title='Enable Trailing Stop', defval=false, inline='trailing', group=exitSettingsGroup)
+trailTriggerInput = input.int(title='  Trigger', minval=1, defval=80, inline='trailing', group=exitSettingsGroup)
+trailPoints = enableTrailing == false ? na : trailTriggerInput
+trailOffsetInput = input.int(title='Offset', minval=1, defval=10, inline='trailing', group=exitSettingsGroup)
+trailOffset = enableTrailing == false ? na : trailOffsetInput
+
+SL =
+	 slType == bracketPercent ? slValue * close / 100 :
+	 slType == bracketATR ? ta.atr(14) * slValue :
+	 slValue
+
+TP =
+	 tpType == bracketPercent ? tpValue * close / 100 :
+	 tpType == bracketATR ? ta.atr(14) * tpValue :
+	 tpValue 
+
+//------------------------------------------------------------------------------
+// Time settings for strategy
+
+var string timeSettingsGroup = 'Time Settings'
+
+filterTradingTimes = input.bool(true, title='Trade Only Within Sessions', inline='times', group=timeSettingsGroup)
+tradingTimes = input.session('0900-1600', title='', inline='times', group=timeSettingsGroup)
+
+isTradingSession = filterTradingTimes ? not na(time(timeframe.period, tradingTimes)) : true
+bgcolor(filterTradingTimes and na(time(timeframe.period, tradingTimes)) ? color.new(color.black,85) : na, title='Not in Trading Session')
+
+//------------------------------------------------------------------------------
+
+var string indicatorDefinitionsGroup = 'Indicator Definitions'
+var string emaOption = 'EMA'
+var string smaOption = 'SMA'
+var string wmaOption = 'WMA'
+var string vwmaOption = 'VWMA'
+var string hmaOption = 'HMA'
+var string rmaOption = 'RMA'
+var string demaOption = 'DEMA'
+
+customIndicator = input.source(close, title='Custom Indicator aka Imported Source', group=indicatorDefinitionsGroup, inline='custom', tooltip=tooltipCustomIndicator)
+
+rsiA_source = input.string(defval=closeOption, title='rsiA', options=[openOption, highOption, lowOption, closeOption, ohlc4Option], group=indicatorDefinitionsGroup, inline='rsiA')
+rsiA_length = input.int(defval=5, title='', group=indicatorDefinitionsGroup, inline='rsiA')
+rsiA_mtf = input.int(defval=1, title='mtf', group=indicatorDefinitionsGroup, inline='rsiA', tooltip=tooltipMTF)
+
+rsiB_source = input.string(defval=closeOption, title='rsiB', options=[openOption, highOption, lowOption, closeOption, ohlc4Option], group=indicatorDefinitionsGroup, inline='rsiB')
+rsiB_length = input.int(defval=14, title='', group=indicatorDefinitionsGroup, inline='rsiB')
+rsiB_mtf = input.int(defval=1, title='mtf', group=indicatorDefinitionsGroup, inline='rsiB')
+
+rsiC_source = input.string(defval=closeOption, title='rsiC', options=[openOption, highOption, lowOption, closeOption, ohlc4Option], group=indicatorDefinitionsGroup, inline='rsiC')
+rsiC_length = input.int(defval=23, title='', group=indicatorDefinitionsGroup, inline='rsiC')
+rsiC_mtf = input.int(defval=1, title='mtf', group=indicatorDefinitionsGroup, inline='rsiC')
+
+maA_type = input.string(title='MaA', defval=emaOption, options=[emaOption, smaOption, wmaOption, vwmaOption, hmaOption, rmaOption, demaOption], inline='maA', group=indicatorDefinitionsGroup)
+maA_source = input.string(defval=closeOption, options=[openOption, highOption, lowOption, closeOption, ohlc4Option], title='', inline='maA', group=indicatorDefinitionsGroup)
+maA_length = input.int(defval=9, title='', inline='maA', group=indicatorDefinitionsGroup)
+maA_mtf = input.int(defval=1, title='mtf', inline='maA', group=indicatorDefinitionsGroup)
+
+maB_type = input.string(title='MaB', defval=emaOption, options=[emaOption, smaOption, wmaOption, vwmaOption, hmaOption, rmaOption, demaOption], inline='maB', group=indicatorDefinitionsGroup)
+maB_source = input.string(defval=closeOption, options=[openOption, highOption, lowOption, closeOption, ohlc4Option], title='', inline='maB', group=indicatorDefinitionsGroup)
+maB_length = input.int(defval=50, title='', inline='maB', group=indicatorDefinitionsGroup)
+maB_mtf = input.int(defval=1, title='mtf', inline='maB', group=indicatorDefinitionsGroup)
+
+maC_type = input.string(title='MaC', defval=emaOption, options=[emaOption, smaOption, wmaOption, vwmaOption, hmaOption, rmaOption, demaOption], inline='maC', group=indicatorDefinitionsGroup)
+maC_source = input.string(defval=closeOption, options=[openOption, highOption, lowOption, closeOption, ohlc4Option], title='', inline='maC', group=indicatorDefinitionsGroup)
+maC_length = input.int(defval=200, title='', inline='maC', group=indicatorDefinitionsGroup)
+maC_mtf = input.int(defval=1, title='mtf', inline='maC', group=indicatorDefinitionsGroup)
+
+diLength = input.int(defval=14, title='ADX-DMI', minval=1, maxval=50, inline='adx', group=indicatorDefinitionsGroup)
+adxLength = input.int(defval=14, minval=1, title='DI Length', inline='adx', group=indicatorDefinitionsGroup)
+mtf4adx = input.int(defval=1, title='mtf', inline='adx', group=indicatorDefinitionsGroup)
+
+periodK = input.int(defval=14, title='Stch', minval=1, inline='stoch', group=indicatorDefinitionsGroup)
+smoothK = input.int(defval=3, title='', minval=1, inline='stoch', group=indicatorDefinitionsGroup)
+periodD = input.int(defval=3, title='', minval=1, inline='stoch', group=indicatorDefinitionsGroup)
+mtf4stoch = input.int(defval=1, title='mtf', inline='stoch', group=indicatorDefinitionsGroup)
+
+bbLength = input.int(defval=20, minval=1, title='BB', inline='bbands', group=indicatorDefinitionsGroup)
+bbSource = input.string(defval=closeOption, options=[openOption, highOption, lowOption, closeOption, ohlc4Option], title='', inline='bbands', group=indicatorDefinitionsGroup)
+bbMult = input.float(defval=2.0, minval=0.001, maxval=50, title='σ', inline='bbands', group=indicatorDefinitionsGroup)
+mtf4bb = input.int(defval=1, title='mtf', inline='bbands', group=indicatorDefinitionsGroup)
+
+kcLength = input.int(defval=13, minval=1, title='KC', inline='keltner', group=indicatorDefinitionsGroup, tooltip=tooltipKeltner)
+kcSource = close //input.source(defval=close, title='', inline='keltner', group=indicatorDefinitionsGroup)
+kcAtrLength = input.int(defval=13, minval=1, title='', inline='keltner', group=indicatorDefinitionsGroup)
+kcMult = input.float(defval=1.5, minval=0.01, maxval=50, title='', inline='keltner', group=indicatorDefinitionsGroup)
+mtf4keltner = input.int(defval=1, title='', inline='keltner', group=indicatorDefinitionsGroup)
+
+macdFastLength = input.int(defval=12, title='MC', inline='macd', group=indicatorDefinitionsGroup, tooltip=tooltipMACD)
+macdSource = close //input.source(defval=close, title='', inline='macd', group=indicatorDefinitionsGroup)
+macdSlowLength = input.int(defval=26, title='', inline='macd', group=indicatorDefinitionsGroup)
+macdSignalLength = input.int(defval=9, title='',  minval = 1, maxval = 50, inline='macd', group=indicatorDefinitionsGroup)
+mtf4macd = input.int(defval=1, title='', inline='macd', group=indicatorDefinitionsGroup)
+
+//------------------------------------------------------------------------------
+
+convertSource(sourceInput) =>
+	out =
+		 sourceInput == closeOption ? close :
+		 sourceInput == openOption ? open :
+		 sourceInput == highOption ? high :
+		 sourceInput == lowOption ? low :
+		 sourceInput == ohlc4Option ? ohlc4 :
+		 close
+	out
+
+maA = MTFLIBRARY.moving_average_mtf(maA_mtf, maA_type, convertSource(maA_source), maA_length)
+maB = MTFLIBRARY.moving_average_mtf(maB_mtf, maB_type, convertSource(maB_source), maB_length)
+maC = MTFLIBRARY.moving_average_mtf(maC_mtf, maC_type, convertSource(maC_source), maC_length)
+
+rsiA = MTFLIBRARY.rsi_mtf(rsiA_mtf, convertSource(rsiA_source), rsiA_length)
+rsiB = MTFLIBRARY.rsi_mtf(rsiB_mtf, convertSource(rsiB_source), rsiB_length)
+rsiC = MTFLIBRARY.rsi_mtf(rsiC_mtf, convertSource(rsiC_source), rsiC_length)
+
+[adx, diPlus, diMinus] = MTFLIBRARY.adx_mtf(mtf4adx, adxLength, diLength)
+[stochK, stochD] = MTFLIBRARY.stoch_mtf(mtf4stoch, periodK, smoothK, periodD)
+[bbBasis, bbUpper, bbLower] = MTFLIBRARY.bollingerbands_mtf(mtf4bb, bbLength, convertSource(bbSource), bbMult)
+[kcUpper, kcLower] = MTFLIBRARY.keltnerchannels_mtf(mtf4keltner, kcSource, kcLength, kcAtrLength, kcMult)
+[macd, macdSignal, macdHist] = MTFLIBRARY.macd_mtf(mtf4macd, macdSource, macdFastLength, macdSlowLength, macdSignalLength)
+volumeMA = ta.ema(volume, 20)
+
+getIndicator(selectionInput) =>
+	out =
+		 selectionInput == openOption ? open :
+		 selectionInput == highOption ? high :
+		 selectionInput == lowOption ? low :
+		 selectionInput == closeOption ? close :
+		 selectionInput == ohlc4Option ? ohlc4 : 
+		 selectionInput == rsiAOption ? rsiA :
+		 selectionInput == rsiBOption ? rsiB :
+		 selectionInput == rsiCOption ? rsiC : 
+		 selectionInput == maAOption ? maA :
+		 selectionInput == maBOption ? maB :
+		 selectionInput == maCOption ? maC : 
+		 selectionInput == adxOption ? adx :
+		 selectionInput == diPlusOption ? diPlus :
+		 selectionInput == diMinusOption ? diMinus :
+		 selectionInput == stochKOption ? stochK :
+		 selectionInput == stochDOption ? stochD : 
+		 selectionInput == bbBasisOption ? bbBasis :
+		 selectionInput == bbUpperOption ? bbUpper :
+		 selectionInput == bbLowerOption ? bbLower :
+		 selectionInput == kcUpperOption ? kcUpper :
+		 selectionInput == kcLowerOption ? kcLower : 
+		 selectionInput == macdOption ? macd :
+		 selectionInput == macdSignalOption ? macdSignal :
+		 selectionInput == macdHistOption ? macdHist :
+		 selectionInput == volumeOption ? volume :
+		 selectionInput == volumeMAOption ? volumeMA :
+		 selectionInput == customIndicatorOption ? customIndicator :
+		 close
+	out
+	 
+getIndicatorIfSelected(selectionInput, selectionValue) =>
+	out =
+		 selectionInput == rsiAOption ? rsiA :
+		 selectionInput == rsiBOption ? rsiB : 
+		 selectionInput == rsiCOption ? rsiC :
+		 selectionInput == maAOption ? maA :
+		 selectionInput == maBOption ? maB :
+		 selectionInput == maCOption ? maC : 
+		 selectionInput == adxOption ? adx :
+		 selectionInput == diPlusOption ? diPlus :
+		 selectionInput == diMinusOption ? diMinus :
+		 selectionInput == stochKOption ? stochK :
+		 selectionInput == stochDOption ? stochD : 
+		 selectionInput == bbBasisOption ? bbBasis :
+		 selectionInput == bbUpperOption ? bbUpper :
+		 selectionInput == bbLowerOption ? bbLower :
+		 selectionInput == kcUpperOption ? kcUpper :
+		 selectionInput == kcLowerOption ? kcLower : 
+		 selectionInput == macdOption ? macd :
+		 selectionInput == macdSignalOption ? macdSignal :
+		 selectionInput == macdHistOption ? macdHist :
+		 selectionInput == volumeOption ? volume :
+		 selectionInput == volumeMAOption ? volumeMA :
+		 selectionInput == customIndicatorOption ? customIndicator :
+		 selectionValue
+	out
+
+longIndicator1 = getIndicator(longIndicatorSelector1)
+longLevel1 = getIndicatorIfSelected(longLevelSelector1, longLevelValue1)
+
+longIndicator2 = getIndicator(longIndicatorSelector2)
+longLevel2 = getIndicatorIfSelected(longLevelSelector2, longLevelValue2)
+
+longIndicator3 = getIndicator(longIndicatorSelector3)
+longLevel3 = getIndicatorIfSelected(longLevelSelector3, longLevelValue3)
+
+shortIndicator1 = getIndicator(shortIndicatorSelector1)
+shortLevel1 = getIndicatorIfSelected(shortLevelSelector1, shortLevelValue1)
+
+shortIndicator2 = getIndicator(shortIndicatorSelector2)
+shortLevel2 = getIndicatorIfSelected(shortLevelSelector2, shortLevelValue2)
+
+shortIndicator3 = getIndicator(shortIndicatorSelector3)
+shortLevel3 = getIndicatorIfSelected(shortLevelSelector3, shortLevelValue3)
+
+GoLong1 =
+	 longConditionTrigger1 == CrossingUpOption ? ta.crossover(longIndicator1, longLevel1) : 
+	 longConditionTrigger1 == CrossingDownOption ? ta.crossunder(longIndicator1, longLevel1) : 
+	 longConditionTrigger1 == GreaterThanOption ? longIndicator1 > longLevel1 : 
+	 longConditionTrigger1 == LessThanOption ? longIndicator1 < longLevel1 : 
+	 true
+
+GoLong2 =
+	 longConditionTrigger2 == CrossingUpOption ? ta.crossover(longIndicator2, longLevel2) : 
+	 longConditionTrigger2 == CrossingDownOption ? ta.crossunder(longIndicator2, longLevel2) : 
+	 longConditionTrigger2 == GreaterThanOption ? longIndicator2 > longLevel2 : 
+	 longConditionTrigger2 == LessThanOption ? longIndicator2 < longLevel2 : 
+	 true
+
+GoLong3 =
+	 longConditionTrigger3 == CrossingUpOption ? ta.crossover(longIndicator3, longLevel3) : 
+	 longConditionTrigger3 == CrossingDownOption ? ta.crossunder(longIndicator3, longLevel3) : 
+	 longConditionTrigger3 == GreaterThanOption ? longIndicator3 > longLevel3 : 
+	 longConditionTrigger3 == LessThanOption ? longIndicator3 < longLevel3 : 
+	 true
+
+GoShort1 =
+	 shortConditionTrigger1 == CrossingUpOption ? ta.crossover(shortIndicator1, shortLevel1) : 
+	 shortConditionTrigger1 == CrossingDownOption ? ta.crossunder(shortIndicator1, shortLevel1) : 
+	 shortConditionTrigger1 == GreaterThanOption ? shortIndicator1 > shortLevel1 : 
+	 shortConditionTrigger1 == LessThanOption ? shortIndicator1 < shortLevel1 : 
+	 true
+
+GoShort2 =
+	 shortConditionTrigger2 == CrossingUpOption ? ta.crossover(shortIndicator2, shortLevel2) : 
+	 shortConditionTrigger2 == CrossingDownOption ? ta.crossunder(shortIndicator2, shortLevel2) : 
+	 shortConditionTrigger2 == GreaterThanOption ? shortIndicator2 > shortLevel2 : 
+	 shortConditionTrigger2 == LessThanOption ? shortIndicator2 < shortLevel2 : 
+	 true
+
+GoShort3 =
+	 shortConditionTrigger3 == CrossingUpOption ? ta.crossover(shortIndicator3, shortLevel3) : 
+	 shortConditionTrigger3 == CrossingDownOption ? ta.crossunder(shortIndicator3, shortLevel3) : 
+	 shortConditionTrigger3 == GreaterThanOption ? shortIndicator3 > shortLevel3 : 
+	 shortConditionTrigger3 == LessThanOption ? shortIndicator3 < shortLevel3 : 
+	 true
+
+GoLong = longIndicatorSelector1 == skipOption and longIndicatorSelector2 == skipOption and longIndicatorSelector3 == skipOption
+	 ? false
+	 : (
+		 (longIndicatorSelector1 == skipOption ? true : GoLong1)
+		 and (longIndicatorSelector2 == skipOption ? true : GoLong2)
+		 and (longIndicatorSelector3 == skipOption ? true : GoLong3)
+		 )
+
+GoShort = shortIndicatorSelector1 == skipOption and shortIndicatorSelector2 == skipOption and shortIndicatorSelector3 == skipOption
+	 ? false
+	 : (
+		 (shortIndicatorSelector1 == skipOption ? true : GoShort1)
+		 and (shortIndicatorSelector2 == skipOption ? true : GoShort2)
+		 and (shortIndicatorSelector3 == skipOption ? true : GoShort3)
+		 )
+
+////////////
+//STRATEGY//
+////////////
+
+if GoLong and isTradingSession and strategy.position_size <= 0
+	strategy.entry('long', strategy.long)
+	alertMessage =
+		 'long sl=' + str.tostring(SL)
+		 + ' tp=' + str.tostring(TP)
+		 + (enableTrailing ? ' trail=true trailtrig=' + str.tostring(trailPoints) + ' traildist=' + str.tostring(trailOffset) : '')
+	alert(message=alertMessage, freq=alert.freq_once_per_bar_close)
+strategy.exit('xl', from_entry='long', loss=SL, profit=TP, trail_points=trailPoints, trail_offset=trailOffset)
+
+if GoShort and isTradingSession and strategy.position_size >= 0
+	strategy.entry('short', strategy.short, when=GoShort)
+	alertMessage =
+		 'short sl=' + str.tostring(SL)
+		 + ' tp=' + str.tostring(TP)
+		 + (enableTrailing ? ' trail=true trailtrig=' + str.tostring(trailPoints) + ' traildist=' + str.tostring(trailOffset) : '')
+	alert(message=alertMessage, freq=alert.freq_once_per_bar_close)
+strategy.exit('xs', from_entry='short', loss=SL, profit=TP, trail_points=trailPoints, trail_offset=trailOffset)
+
+///////////
+// PLOTS //
+///////////
+
+plot(maA, title='maA', linewidth=1, color=color.new(color.lime, 0))
+plot(maB, title='maB', linewidth=2, color=color.new(color.fuchsia, 0))
+plot(maC, title='maC', linewidth=3, color=color.new(color.orange, 0))
+
+////////////
+//WARNINGS//
+////////////
+
+atrFullChart = ta.atr(2000) / syminfo.mintick
+showWarning = (SL > 0 and SL <= atrFullChart) or (TP > 0 and TP <= atrFullChart) or (trailOffset > 0 and trailOffset <= atrFullChart)
+
+whichBracketsAreTooTight =
+	 (SL > 0 and SL <= atrFullChart) and (TP == 0 or TP > atrFullChart) and (trailOffset == 0 or na(trailOffset) or trailOffset > atrFullChart) ? 'StopLoss' :
+	 (SL > 0 and SL <= atrFullChart) and (TP > 0 and TP <= atrFullChart) and (trailOffset == 0 or na(trailOffset) or trailOffset > atrFullChart) ? 'StopLoss, TakeProfit' :
+	 (SL > 0 and SL <= atrFullChart) and (TP > 0 and TP <= atrFullChart) and (trailOffset > 0 and trailOffset <= atrFullChart) ? 'StopLoss, TakeProfit, Trail' :
+	 (SL > 0 and SL <= atrFullChart) and (TP == 0 or TP > atrFullChart) and (trailOffset > 0 and trailOffset <= atrFullChart) ? 'StopLoss, Trail' :
+	 (SL == 0 or SL > atrFullChart) and (TP > 0 and TP <= atrFullChart) and (trailOffset == 0 or na(trailOffset) or trailOffset > atrFullChart) ? 'TakeProfit' :
+	 (SL == 0 or SL > atrFullChart) and (TP > 0 and TP <= atrFullChart) and (trailOffset > 0 and trailOffset <= atrFullChart) ? 'TakeProfit, Trail' :
+	 (SL == 0 or SL > atrFullChart) and (TP == 0 or TP > atrFullChart) and (trailOffset > 0 and trailOffset <= atrFullChart) ? 'Trail' : 
+	 ''
+
+warningHeader = 'WARNING!'
+warningHeader2 = 'Too tight ' + whichBracketsAreTooTight
+warningText = 'Due to non-tick-data candle mechanisms here of TradingView, backtest results\nyou are seeing right now in the Strategy Tester are probably better than in reality.'
+	 + '\n\nWhy?\n\nStrategy Tester assumes that at each candle market has first moved in your\nfavor (so while in Long position market first reached HIGH of a candle, and while\nin Short position first reached LOW), and against you after that. '
+	 + 'The suggested\nworkaround, to make backtester results more real, is to increase SL/TP/Trail,\nso they are higher than ATR for this chart (this instrument on this timeframe).'
+	 + '\n\nThat was in quick words, but you can learn more from this\nvideo: https://www.youtube.com/watch?v=uM5m_iUAP8g\n\nATR value (in ticks) for this chart is '
+	 + str.tostring(atrFullChart) 
+warningText2 = 'You can proceed with the current settings, because you still might want to set\ntight SL/TP/Trail for alerts, but be assured that backtest results ain\'t real.'
+
+var table warningsTable = table.new(position=position.top_right, columns=1, rows=4, border_width=1)
+if barstate.islastconfirmedhistory and showWarning
+	table.cell(warningsTable, column=0, row=0, text=warningHeader, bgcolor=na, text_color=color.orange, text_size=size.large)
+	table.cell(warningsTable, column=0, row=1, text=warningHeader2, bgcolor=na, text_color=color.orange, text_size=size.large)
+	table.cell(warningsTable, column=0, row=2, text=warningText, bgcolor=na, text_color=color.teal, text_size=size.normal, text_halign=text.align_right)
+	table.cell(warningsTable, column=0, row=3, text=warningText2, bgcolor=na, text_color=color.teal, text_size=size.normal, text_halign=text.align_right)
+
+TradingTools.Software/Optimizer , https://discord.gg/pGHHRczpbu
+http://tradingtools.software/optimizer
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © fadizeidan
+
+//@version=5
+indicator("RLT EMA Strategy Indicator", overlay=true)
+
+len = input.int(10, minval=1, title="Length")
+src = input(close, title="Source")
+
+ema = ta.ema(src, len)
+
+crossOver = 0
+crossOver := if ta.crossover(close, ema[1])
+    1
+else
+    if crossOver[1] == 1 and close > open
+        1
+    else
+        0
+
+crossUnder =  0
+crossUnder := if ta.crossunder(close, ema[1])
+    1
+else
+    if crossUnder[1] == 1 and close < open
+        1
+    else
+        0
+
+patternLabelPosLow = low - (ta.atr(30) * 0.6)
+patternLabelPosHigh = high + (ta.atr(30) * 0.6)
+
+plotshape(crossOver[1] == 1 and crossOver == 0 and open > close and close > ema and barstate.isconfirmed, style=shape.triangleup, location=location.belowbar, color=color.new(color.green, 0), size=size.small)
+plotshape(crossUnder[1] == 1 and crossUnder == 0 and open < close and close < ema and barstate.isconfirmed, style=shape.triangledown, location =location.abovebar, color=color.new(color.red, 0), size=size.small)
+
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Beardy_Fred
+
+//@version=5
+indicator('Beardy Squeeze Pro', shorttitle='Squeeze', overlay=false, precision=2)
+
+length = input.int(20, "TTM Squeeze Length")
+
+//BOLLINGER BANDS
+BB_mult = input.float(2.0, "Bollinger Band STD Multiplier")
+BB_basis = ta.sma(close, length)
+dev = BB_mult * ta.stdev(close, length)
+BB_upper = BB_basis + dev
+BB_lower = BB_basis - dev
+
+//KELTNER CHANNELS
+KC_mult_high = input.float(1.0, "Keltner Channel #1")
+KC_mult_mid = input.float(1.5, "Keltner Channel #2")
+KC_mult_low = input.float(2.0, "Keltner Channel #3")
+KC_basis = ta.sma(close, length)
+devKC = ta.sma(ta.tr, length)
+KC_upper_high = KC_basis + devKC * KC_mult_high
+KC_lower_high = KC_basis - devKC * KC_mult_high
+KC_upper_mid = KC_basis + devKC * KC_mult_mid
+KC_lower_mid = KC_basis - devKC * KC_mult_mid
+KC_upper_low = KC_basis + devKC * KC_mult_low
+KC_lower_low = KC_basis - devKC * KC_mult_low
+
+//SQUEEZE CONDITIONS
+NoSqz = BB_lower < KC_lower_low or BB_upper > KC_upper_low //NO SQUEEZE: GREEN
+LowSqz = BB_lower >= KC_lower_low or BB_upper <= KC_upper_low //LOW COMPRESSION: BLACK
+MidSqz = BB_lower >= KC_lower_mid or BB_upper <= KC_upper_mid //MID COMPRESSION: RED
+HighSqz = BB_lower >= KC_lower_high or BB_upper <= KC_upper_high //HIGH COMPRESSION: ORANGE
+
+//MOMENTUM OSCILLATOR
+mom = ta.linreg(close - math.avg(math.avg(ta.highest(high, length), ta.lowest(low, length)), ta.sma(close, length)), length, 0)
+
+//MOMENTUM HISTOGRAM COLOR
+iff_1 = mom > nz(mom[1]) ? color.new(color.aqua, 0) : color.new(#2962ff, 0)
+iff_2 = mom < nz(mom[1]) ? color.new(color.red, 0) : color.new(color.yellow, 0)
+mom_color = mom > 0 ? iff_1 : iff_2
+
+//SQUEEZE DOTS COLOR
+sq_color = HighSqz ? color.new(color.orange, 0) : MidSqz ? color.new(color.red, 0) : LowSqz ? color.new(color.black, 0) : color.new(color.green, 0)
+
+//ALERTS
+Detect_Sqz_Start = input.bool(true, "Alert Price Action Squeeze")
+Detect_Sqz_Fire = input.bool(true, "Alert Squeeze Firing")
+
+if Detect_Sqz_Start and NoSqz[1] and not NoSqz
+    alert("Squeeze Started")
+else if Detect_Sqz_Fire and NoSqz and not NoSqz[1]
+    alert("Squeeze Fired")
+
+//PLOTS
+plot(mom, title='MOM', color=mom_color, style=plot.style_columns, linewidth=2)
+plot(0, title='SQZ', color=sq_color, style=plot.style_circles, linewidth=3)
+
+
+
+//@version = 4
+
+// TW Golden Indicators Package
+// This package features BB (with 20 ma), inside bar color change (yellow), outside bar color change (white), holy grail 2-candle pattern background highlight (yellow) and alert capabilities
+
+
+
+study(title="TW Golden Indicators w Alert Capability", shorttitle="TW Golden Indicators PREMIUM w/Alerts", overlay=true)
+
+src = input(close, title="Source")
+length = input(20, minval=1)
+mult = input(2.0, minval=0.001, maxval=50, title="StdDev")
+basis = sma(src, length)
+dev = mult * stdev(src, length)
+upper = basis + dev
+lower = basis - dev
+plot(basis, "Basis", color.red, linewidth = 2, transp = 10)
+p1 = plot(upper, "Upper", color.teal, linewidth = 2, transp = 10)
+p2 = plot(lower, "Lower", color.teal, linewidth = 2, transp = 10)
+fill(p1, p2, title = "Background of BB", color=#198787, transp=95)
+
+
+inBar = low > low[1] and high < high[1]
+outBar = low < low[1] and high > high[1]
+holyGrail = low[1] < low[2] and high[1] > high[2] and low > low[1] and high < high[1]
+
+
+//inside and outside using bar colors and labels
+barcolor (inBar == 1 ? color.yellow : na, title = "Inside Bar")
+barcolor (outBar == 1 ? color.white : na, title = "Outside Bar")
+plotshape(inBar == 1, style = shape.labelup, text = "IB", location = location.abovebar, color = color.yellow, textcolor = color.black)
+plotshape(outBar == 1, style = shape.labeldown, text = "OB", location = location.belowbar, color = color.white, textcolor = color.black)
+
+//Holy Grail background highlight
+bgcolor (holyGrail == 1 ? color.yellow : na, offset = -1, title = "Holy Grail - Out Bar")
+bgcolor (holyGrail == 1 ? color.yellow : na, title = "Holy Grail - In Bar")
+
+tripleIB = low[2] > low[3] and high[2] < high[3]  and low[1] > low[2] and high[1] < high[2] and low > low[1] and high < high[1]
+doubleIB = low[1] > low[2] and high[1] < high[2]  and low > low[1] and high < high[1]
+
+bgcolor (tripleIB == 1 ? color.orange : na, offset = -2, title = "3x In - 1st")
+bgcolor (tripleIB == 1 ? color.orange : na, offset = -1, title = "3x In - 2nd")
+bgcolor (tripleIB == 1 ? color.orange : na, title = "3x In - 3rd")
+
+bgcolor (doubleIB == 1 and tripleIB == 0 ? color.blue : na, offset = -1, title = "2x In - 1st")
+bgcolor (doubleIB == 1 and tripleIB == 0 ? color.blue : na, title = "2x In - 2nd")
+
+//alert section
+
+alertcondition (inBar, title = "Inside Bar", message = "Inside Bar Alert")
+alertcondition (outBar, title = "Outside Bar", message = "Outside Bar Alert")
+alertcondition (holyGrail, title = "Holy Grail", message = "Holy Grail Alert")
+alertcondition (doubleIB, title = "Double Inside Bar", message = "Double Inside Bar Alert")
+alertcondition (tripleIB, title = "Triple Inside Bar", message = "Triple Inside Bar Alert")
+
+
+
+//@version = 4
+
+// TW Nirvana Indicator
+// This indicator is for the TW Nirvana 2-candle pattern with alert capabilties
+// Default is an aqua background highlight for the 2 candles - Nirvana In and Nirvana Out
+
+
+
+study(title="TW Nirvana Indicator", shorttitle="TW Nirvana", overlay=true)
+
+
+//definition
+nirvana = low[1] > low[2] and high[1] < high[2] and low < low[1] and high > high[1]
+
+
+//background highlight
+bgcolor (nirvana == 1 ? color.aqua : na, offset = -1, title = "Nirvana - In Bar")
+bgcolor (nirvana == 1 ? color.aqua : na, title = "Nirvana - Out Bar")
+
+//alert section
+
+alertcondition (nirvana, title = "Nirvana", message = "Nirvana Alert")
+
+
+// Created by UCSgears
+// Adopted from TTM Reversion Bands
+// Added a little touch
+
+
+study(title="UCS_TTM - Reversion Bands", shorttitle="UCS_TTM-RTM", overlay=true)
+
+// Defining Timeframe and Parameters
+a = isdwm ? 1 : 0
+b = isintraday ? 1 : 0
+
+// TTM - Revertion to the Mean Band - INPUTS
+z = input(0, title = "Offset")
+usesl = input(true, title = "RTM against Slope (UCSgears Addition)", type=bool)
+length = a == 1 ? 13 : 25
+atrlen = a == 1 ? 13 : 25
+mult = a == 1 ? 1.5 : 2.5
+range =  tr
+
+// Calculations
+ma = ema(close, length)
+rangema = ema(range, atrlen)
+upper = ma + rangema * mult
+lower = ma - rangema * mult
+
+// All Plots
+plot(upper, color=purple, title="Upper Channel", offset = z)
+plot(ma, color=red, title="Middle Line", offset = z)
+plot(lower, color=purple, title="Lower Channel", offset = z)
+
+//Slope Definition
+slope = (ma - ma[5])/5
+
+sh = highest(slope, 250)
+sl = lowest(slope, 250)
+sm = 0 /////////////////////////////////////////////////////////////////////////////////////////////////(sh+sl)/2
+
+pup = slope > sm ? 1 : 0
+ndn = slope < sm ? 1 : 0
+
+plotshape(usesl ? pup : na, style = shape.triangleup, color = green, location = location.bottom, title = "Positive Slope", transp = 0)
+plotshape(usesl ? ndn : na, style = shape.triangledown, color = red, location = location.top, title = "Negative Slope", transp = 0)
+
+// Condition for Dots
+dota = (high > upper) and (high < upper)[1] ? upper : na
+dotb = (low  < lower) and (low  > lower)[1] ? lower : na
+dotbsp = pup == 1 ? dotb : na
+dotasn = ndn == 1 ? dota : na
+
+plotshape(usesl ? dotasn : dota, style = shape.circle, location = location.abovebar, color = fuchsia, title = "RTM UP", text = "RTM - UP \n SHORT", textcolor = fuchsia, transp = 0)
+plotshape(usesl ? dotbsp : dotb, style = shape.circle, location = location.belowbar, color = blue, title = "RTM Down", text = "RTM - DOWN \n LONG", textcolor = blue, transp = 0)

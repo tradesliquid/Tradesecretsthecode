@@ -1,0 +1,764 @@
+customIndicator = input.source(close, title='Custom Indicator aka Imported Source', group=indicatorDefinitionsGroup, inline='custom', tooltip=tooltipCustomIndicator)
+
+rsiA_source = input.string(defval=closeOption, title='rsiA', options=[openOption, highOption, lowOption, closeOption, ohlc4Option], group=indicatorDefinitionsGroup, inline='rsiA')
+rsiA_length = input.int(defval=5, title='', group=indicatorDefinitionsGroup, inline='rsiA')
+rsiA_mtf = input.int(defval=1, title='mtf', group=indicatorDefinitionsGroup, inline='rsiA', tooltip=tooltipMTF)
+
+rsiB_source = input.string(defval=closeOption, title='rsiB', options=[openOption, highOption, lowOption, closeOption, ohlc4Option], group=indicatorDefinitionsGroup, inline='rsiB')
+rsiB_length = input.int(defval=14, title='', group=indicatorDefinitionsGroup, inline='rsiB')
+rsiB_mtf = input.int(defval=1, title='mtf', group=indicatorDefinitionsGroup, inline='rsiB')
+
+rsiC_source = input.string(defval=closeOption, title='rsiC', options=[openOption, highOption, lowOption, closeOption, ohlc4Option], group=indicatorDefinitionsGroup, inline='rsiC')
+rsiC_length = input.int(defval=23, title='', group=indicatorDefinitionsGroup, inline='rsiC')
+rsiC_mtf = input.int(defval=1, title='mtf', group=indicatorDefinitionsGroup, inline='rsiC')
+
+maA_type = input.string(title='MaA', defval=emaOption, options=[emaOption, smaOption, wmaOption, vwmaOption, hmaOption, rmaOption, demaOption], inline='maA', group=indicatorDefinitionsGroup)
+maA_source = input.string(defval=closeOption, options=[openOption, highOption, lowOption, closeOption, ohlc4Option], title='', inline='maA', group=indicatorDefinitionsGroup)
+maA_length = input.int(defval=9, title='', inline='maA', group=indicatorDefinitionsGroup)
+maA_mtf = input.int(defval=1, title='mtf', inline='maA', group=indicatorDefinitionsGroup)
+
+maB_type = input.string(title='MaB', defval=emaOption, options=[emaOption, smaOption, wmaOption, vwmaOption, hmaOption, rmaOption, demaOption], inline='maB', group=indicatorDefinitionsGroup)
+maB_source = input.string(defval=closeOption, options=[openOption, highOption, lowOption, closeOption, ohlc4Option], title='', inline='maB', group=indicatorDefinitionsGroup)
+maB_length = input.int(defval=50, title='', inline='maB', group=indicatorDefinitionsGroup)
+maB_mtf = input.int(defval=1, title='mtf', inline='maB', group=indicatorDefinitionsGroup)
+
+maC_type = input.string(title='MaC', defval=emaOption, options=[emaOption, smaOption, wmaOption, vwmaOption, hmaOption, rmaOption, demaOption], inline='maC', group=indicatorDefinitionsGroup)
+maC_source = input.string(defval=closeOption, options=[openOption, highOption, lowOption, closeOption, ohlc4Option], title='', inline='maC', group=indicatorDefinitionsGroup)
+maC_length = input.int(defval=200, title='', inline='maC', group=indicatorDefinitionsGroup)
+maC_mtf = input.int(defval=1, title='mtf', inline='maC', group=indicatorDefinitionsGroup)
+
+diLength = input.int(defval=14, title='ADX-DMI', minval=1, maxval=50, inline='adx', group=indicatorDefinitionsGroup)
+adxLength = input.int(defval=14, minval=1, title='DI Length', inline='adx', group=indicatorDefinitionsGroup)
+mtf4adx = input.int(defval=1, title='mtf', inline='adx', group=indicatorDefinitionsGroup)
+
+periodK = input.int(defval=14, title='Stch', minval=1, inline='stoch', group=indicatorDefinitionsGroup)
+smoothK = input.int(defval=3, title='', minval=1, inline='stoch', group=indicatorDefinitionsGroup)
+periodD = input.int(defval=3, title='', minval=1, inline='stoch', group=indicatorDefinitionsGroup)
+mtf4stoch = input.int(defval=1, title='mtf', inline='stoch', group=indicatorDefinitionsGroup)
+
+bbLength = input.int(defval=20, minval=1, title='BB', inline='bbands', group=indicatorDefinitionsGroup)
+bbSource = input.string(defval=closeOption, options=[openOption, highOption, lowOption, closeOption, ohlc4Option], title='', inline='bbands', group=indicatorDefinitionsGroup)
+bbMult = input.float(defval=2.0, minval=0.001, maxval=50, title='σ', inline='bbands', group=indicatorDefinitionsGroup)
+mtf4bb = input.int(defval=1, title='mtf', inline='bbands', group=indicatorDefinitionsGroup)
+
+kcLength = input.int(defval=13, minval=1, title='KC', inline='keltner', group=indicatorDefinitionsGroup, tooltip=tooltipKeltner)
+kcSource = close //input.source(defval=close, title='', inline='keltner', group=indicatorDefinitionsGroup)
+kcAtrLength = input.int(defval=13, minval=1, title='', inline='keltner', group=indicatorDefinitionsGroup)
+kcMult = input.float(defval=1.5, minval=0.01, maxval=50, title='', inline='keltner', group=indicatorDefinitionsGroup)
+mtf4keltner = input.int(defval=1, title='', inline='keltner', group=indicatorDefinitionsGroup)
+
+macdFastLength = input.int(defval=12, title='MC', inline='macd', group=indicatorDefinitionsGroup, tooltip=tooltipMACD)
+macdSource = close //input.source(defval=close, title='', inline='macd', group=indicatorDefinitionsGroup)
+macdSlowLength = input.int(defval=26, title='', inline='macd', group=indicatorDefinitionsGroup)
+macdSignalLength = input.int(defval=9, title='',  minval = 1, maxval = 50, inline='macd', group=indicatorDefinitionsGroup)
+mtf4macd = input.int(defval=1, title='', inline='macd', group=indicatorDefinitionsGroup)
+
+//------------------------------------------------------------------------------
+
+convertSource(sourceInput) =>
+	out =
+		 sourceInput == closeOption ? close :
+		 sourceInput == openOption ? open :
+		 sourceInput == highOption ? high :
+		 sourceInput == lowOption ? low :
+		 sourceInput == ohlc4Option ? ohlc4 :
+		 close
+	out
+
+maA = MTFLIBRARY.moving_average_mtf(maA_mtf, maA_type, convertSource(maA_source), maA_length)
+maB = MTFLIBRARY.moving_average_mtf(maB_mtf, maB_type, convertSource(maB_source), maB_length)
+maC = MTFLIBRARY.moving_average_mtf(maC_mtf, maC_type, convertSource(maC_source), maC_length)
+
+rsiA = MTFLIBRARY.rsi_mtf(rsiA_mtf, convertSource(rsiA_source), rsiA_length)
+rsiB = MTFLIBRARY.rsi_mtf(rsiB_mtf, convertSource(rsiB_source), rsiB_length)
+rsiC = MTFLIBRARY.rsi_mtf(rsiC_mtf, convertSource(rsiC_source), rsiC_length)
+
+[adx, diPlus, diMinus] = MTFLIBRARY.adx_mtf(mtf4adx, adxLength, diLength)
+[stochK, stochD] = MTFLIBRARY.stoch_mtf(mtf4stoch, periodK, smoothK, periodD)
+[bbBasis, bbUpper, bbLower] = MTFLIBRARY.bollingerbands_mtf(mtf4bb, bbLength, convertSource(bbSource), bbMult)
+[kcUpper, kcLower] = MTFLIBRARY.keltnerchannels_mtf(mtf4keltner, kcSource, kcLength, kcAtrLength, kcMult)
+[macd, macdSignal, macdHist] = MTFLIBRARY.macd_mtf(mtf4macd, macdSource, macdFastLength, macdSlowLength, macdSignalLength)
+volumeMA = ta.ema(volume, 20)
+
+getIndicator(selectionInput) =>
+	out =
+		 selectionInput == openOption ? open :
+		 selectionInput == highOption ? high :
+		 selectionInput == lowOption ? low :
+		 selectionInput == closeOption ? close :
+		 selectionInput == ohlc4Option ? ohlc4 : 
+		 selectionInput == rsiAOption ? rsiA :
+		 selectionInput == rsiBOption ? rsiB :
+		 selectionInput == rsiCOption ? rsiC : 
+		 selectionInput == maAOption ? maA :
+		 selectionInput == maBOption ? maB :
+		 selectionInput == maCOption ? maC : 
+		 selectionInput == adxOption ? adx :
+		 selectionInput == diPlusOption ? diPlus :
+		 selectionInput == diMinusOption ? diMinus :
+		 selectionInput == stochKOption ? stochK :
+		 selectionInput == stochDOption ? stochD : 
+		 selectionInput == bbBasisOption ? bbBasis :
+		 selectionInput == bbUpperOption ? bbUpper :
+		 selectionInput == bbLowerOption ? bbLower :
+		 selectionInput == kcUpperOption ? kcUpper :
+		 selectionInput == kcLowerOption ? kcLower : 
+		 selectionInput == macdOption ? macd :
+		 selectionInput == macdSignalOption ? macdSignal :
+		 selectionInput == macdHistOption ? macdHist :
+		 selectionInput == volumeOption ? volume :
+		 selectionInput == volumeMAOption ? volumeMA :
+		 selectionInput == customIndicatorOption ? customIndicator :
+		 close
+	out
+	 
+getIndicatorIfSelected(selectionInput, selectionValue) =>
+	out =
+		 selectionInput == rsiAOption ? rsiA :
+		 selectionInput == rsiBOption ? rsiB : 
+		 selectionInput == rsiCOption ? rsiC :
+		 selectionInput == maAOption ? maA :
+		 selectionInput == maBOption ? maB :
+		 selectionInput == maCOption ? maC : 
+		 selectionInput == adxOption ? adx :
+		 selectionInput == diPlusOption ? diPlus :
+		 selectionInput == diMinusOption ? diMinus :
+		 selectionInput == stochKOption ? stochK :
+		 selectionInput == stochDOption ? stochD : 
+		 selectionInput == bbBasisOption ? bbBasis :
+		 selectionInput == bbUpperOption ? bbUpper :
+		 selectionInput == bbLowerOption ? bbLower :
+		 selectionInput == kcUpperOption ? kcUpper :
+		 selectionInput == kcLowerOption ? kcLower : 
+		 selectionInput == macdOption ? macd :
+		 selectionInput == macdSignalOption ? macdSignal :
+		 selectionInput == macdHistOption ? macdHist :
+		 selectionInput == volumeOption ? volume :
+		 selectionInput == volumeMAOption ? volumeMA :
+		 selectionInput == customIndicatorOption ? customIndicator :
+		 selectionValue
+	out
+
+longIndicator1 = getIndicator(longIndicatorSelector1)
+longLevel1 = getIndicatorIfSelected(longLevelSelector1, longLevelValue1)
+
+longIndicator2 = getIndicator(longIndicatorSelector2)
+longLevel2 = getIndicatorIfSelected(longLevelSelector2, longLevelValue2)
+
+longIndicator3 = getIndicator(longIndicatorSelector3)
+longLevel3 = getIndicatorIfSelected(longLevelSelector3, longLevelValue3)
+
+shortIndicator1 = getIndicator(shortIndicatorSelector1)
+shortLevel1 = getIndicatorIfSelected(shortLevelSelector1, shortLevelValue1)
+
+shortIndicator2 = getIndicator(shortIndicatorSelector2)
+shortLevel2 = getIndicatorIfSelected(shortLevelSelector2, shortLevelValue2)
+
+shortIndicator3 = getIndicator(shortIndicatorSelector3)
+shortLevel3 = getIndicatorIfSelected(shortLevelSelector3, shortLevelValue3)
+
+GoLong1 =
+	 longConditionTrigger1 == CrossingUpOption ? ta.crossover(longIndicator1, longLevel1) : 
+	 longConditionTrigger1 == CrossingDownOption ? ta.crossunder(longIndicator1, longLevel1) : 
+	 longConditionTrigger1 == GreaterThanOption ? longIndicator1 > longLevel1 : 
+	 longConditionTrigger1 == LessThanOption ? longIndicator1 < longLevel1 : 
+	 true
+
+GoLong2 =
+	 longConditionTrigger2 == CrossingUpOption ? ta.crossover(longIndicator2, longLevel2) : 
+	 longConditionTrigger2 == CrossingDownOption ? ta.crossunder(longIndicator2, longLevel2) : 
+	 longConditionTrigger2 == GreaterThanOption ? longIndicator2 > longLevel2 : 
+	 longConditionTrigger2 == LessThanOption ? longIndicator2 < longLevel2 : 
+	 true
+
+GoLong3 =
+	 longConditionTrigger3 == CrossingUpOption ? ta.crossover(longIndicator3, longLevel3) : 
+	 longConditionTrigger3 == CrossingDownOption ? ta.crossunder(longIndicator3, longLevel3) : 
+	 longConditionTrigger3 == GreaterThanOption ? longIndicator3 > longLevel3 : 
+	 longConditionTrigger3 == LessThanOption ? longIndicator3 < longLevel3 : 
+	 true
+
+GoShort1 =
+	 shortConditionTrigger1 == CrossingUpOption ? ta.crossover(shortIndicator1, shortLevel1) : 
+	 shortConditionTrigger1 == CrossingDownOption ? ta.crossunder(shortIndicator1, shortLevel1) : 
+	 shortConditionTrigger1 == GreaterThanOption ? shortIndicator1 > shortLevel1 : 
+	 shortConditionTrigger1 == LessThanOption ? shortIndicator1 < shortLevel1 : 
+	 true
+
+GoShort2 =
+	 shortConditionTrigger2 == CrossingUpOption ? ta.crossover(shortIndicator2, shortLevel2) : 
+	 shortConditionTrigger2 == CrossingDownOption ? ta.crossunder(shortIndicator2, shortLevel2) : 
+	 shortConditionTrigger2 == GreaterThanOption ? shortIndicator2 > shortLevel2 : 
+	 shortConditionTrigger2 == LessThanOption ? shortIndicator2 < shortLevel2 : 
+	 true
+
+GoShort3 =
+	 shortConditionTrigger3 == CrossingUpOption ? ta.crossover(shortIndicator3, shortLevel3) : 
+	 shortConditionTrigger3 == CrossingDownOption ? ta.crossunder(shortIndicator3, shortLevel3) : 
+	 shortConditionTrigger3 == GreaterThanOption ? shortIndicator3 > shortLevel3 : 
+	 shortConditionTrigger3 == LessThanOption ? shortIndicator3 < shortLevel3 : 
+	 true
+
+GoLong = longIndicatorSelector1 == skipOption and longIndicatorSelector2 == skipOption and longIndicatorSelector3 == skipOption
+	 ? false
+	 : (
+		 (longIndicatorSelector1 == skipOption ? true : GoLong1)
+		 and (longIndicatorSelector2 == skipOption ? true : GoLong2)
+		 and (longIndicatorSelector3 == skipOption ? true : GoLong3)
+		 )
+
+GoShort = shortIndicatorSelector1 == skipOption and shortIndicatorSelector2 == skipOption and shortIndicatorSelector3 == skipOption
+	 ? false
+	 : (
+		 (shortIndicatorSelector1 == skipOption ? true : GoShort1)
+		 and (shortIndicatorSelector2 == skipOption ? true : GoShort2)
+		 and (shortIndicatorSelector3 == skipOption ? true : GoShort3)
+		 )
+
+////////////
+//STRATEGY//
+////////////
+
+if GoLong and isTradingSession and strategy.position_size <= 0
+	strategy.entry('long', strategy.long)
+	alertMessage =
+		 'long sl=' + str.tostring(SL)
+		 + ' tp=' + str.tostring(TP)
+		 + (enableTrailing ? ' trail=true trailtrig=' + str.tostring(trailPoints) + ' traildist=' + str.tostring(trailOffset) : '')
+	alert(message=alertMessage, freq=alert.freq_once_per_bar_close)
+strategy.exit('xl', from_entry='long', loss=SL, profit=TP, trail_points=trailPoints, trail_offset=trailOffset)
+
+if GoShort and isTradingSession and strategy.position_size >= 0
+	strategy.entry('short', strategy.short, when=GoShort)
+	alertMessage =
+		 'short sl=' + str.tostring(SL)
+		 + ' tp=' + str.tostring(TP)
+		 + (enableTrailing ? ' trail=true trailtrig=' + str.tostring(trailPoints) + ' traildist=' + str.tostring(trailOffset) : '')
+	alert(message=alertMessage, freq=alert.freq_once_per_bar_close)
+strategy.exit('xs', from_entry='short', loss=SL, profit=TP, trail_points=trailPoints, trail_offset=trailOffset)
+
+///////////
+// PLOTS //
+///////////
+
+plot(maA, title='maA', linewidth=1, color=color.new(color.lime, 0))
+plot(maB, title='maB', linewidth=2, color=color.new(color.fuchsia, 0))
+plot(maC, title='maC', linewidth=3, color=color.new(color.orange, 0))
+
+////////////
+//WARNINGS//
+////////////
+
+atrFullChart = ta.atr(2000) / syminfo.mintick
+showWarning = (SL > 0 and SL <= atrFullChart) or (TP > 0 and TP <= atrFullChart) or (trailOffset > 0 and trailOffset <= atrFullChart)
+
+whichBracketsAreTooTight =
+	 (SL > 0 and SL <= atrFullChart) and (TP == 0 or TP > atrFullChart) and (trailOffset == 0 or na(trailOffset) or trailOffset > atrFullChart) ? 'StopLoss' :
+	 (SL > 0 and SL <= atrFullChart) and (TP > 0 and TP <= atrFullChart) and (trailOffset == 0 or na(trailOffset) or trailOffset > atrFullChart) ? 'StopLoss, TakeProfit' :
+	 (SL > 0 and SL <= atrFullChart) and (TP > 0 and TP <= atrFullChart) and (trailOffset > 0 and trailOffset <= atrFullChart) ? 'StopLoss, TakeProfit, Trail' :
+	 (SL > 0 and SL <= atrFullChart) and (TP == 0 or TP > atrFullChart) and (trailOffset > 0 and trailOffset <= atrFullChart) ? 'StopLoss, Trail' :
+	 (SL == 0 or SL > atrFullChart) and (TP > 0 and TP <= atrFullChart) and (trailOffset == 0 or na(trailOffset) or trailOffset > atrFullChart) ? 'TakeProfit' :
+	 (SL == 0 or SL > atrFullChart) and (TP > 0 and TP <= atrFullChart) and (trailOffset > 0 and trailOffset <= atrFullChart) ? 'TakeProfit, Trail' :
+	 (SL == 0 or SL > atrFullChart) and (TP == 0 or TP > atrFullChart) and (trailOffset > 0 and trailOffset <= atrFullChart) ? 'Trail' : 
+	 ''
+
+warningHeader = 'WARNING!'
+warningHeader2 = 'Too tight ' + whichBracketsAreTooTight
+warningText = 'Due to non-tick-data candle mechanisms here of TradingView, backtest results\nyou are seeing right now in the Strategy Tester are probably better than in reality.'
+	 + '\n\nWhy?\n\nStrategy Tester assumes that at each candle market has first moved in your\nfavor (so while in Long position market first reached HIGH of a candle, and while\nin Short position first reached LOW), and against you after that. '
+	 + 'The suggested\nworkaround, to make backtester results more real, is to increase SL/TP/Trail,\nso they are higher than ATR for this chart (this instrument on this timeframe).'
+	 + '\n\nThat was in quick words, but you can learn more from this\nvideo: https://www.youtube.com/watch?v=uM5m_iUAP8g\n\nATR value (in ticks) for this chart is '
+	 + str.tostring(atrFullChart) 
+warningText2 = 'You can proceed with the current settings, because you still might want to set\ntight SL/TP/Trail for alerts, but be assured that backtest results ain\'t real.'
+
+var table warningsTable = table.new(position=position.top_right, columns=1, rows=4, border_width=1)
+if barstate.islastconfirmedhistory and showWarning
+	table.cell(warningsTable, column=0, row=0, text=warningHeader, bgcolor=na, text_color=color.orange, text_size=size.large)
+	table.cell(warningsTable, column=0, row=1, text=warningHeader2, bgcolor=na, text_color=color.orange, text_size=size.large)
+	table.cell(warningsTable, column=0, row=2, text=warningText, bgcolor=na, text_color=color.teal, text_size=size.normal, text_halign=text.align_right)
+	table.cell(warningsTable, column=0, row=3, text=warningText2, bgcolor=na, text_color=color.teal, text_size=size.normal, text_halign=text.align_right)
+
+
+//@version=4
+//Time Frame: H1
+strategy("Pin Bar Magic v1", overlay=true)
+
+// User Input
+usr_risk = input(title="Equity Risk (%)",type=input.integer,minval=1,maxval=100,step=1,defval=3,confirm=false)
+atr_mult = input(title="Stop Loss (x*ATR, Float)",type=input.float,minval=0.1,maxval=100,step=0.1,defval=0.5,confirm=false)
+slPoints = input(title="Stop Loss Trail Points (Pips)",type=input.integer,minval=1,maxval=1000,step=1,defval=1,confirm=false)
+slOffset = input(title="Stop Loss Trail Offset (Pips)",type=input.integer,minval=1,maxval=1000,step=1,defval=1,confirm=false)
+sma_slow = input(title="Slow SMA (Period)",type=input.integer,minval=1,maxval=500,step=1,defval=50,confirm=false)
+ema_medm = input(title="Medm EMA (Period)",type=input.integer,minval=1,maxval=500,step=1,defval=18,confirm=false)
+ema_fast = input(title="Fast EMA (Period)",type=input.integer,minval=1,maxval=500,step=1,defval=6,confirm=false)
+atr_valu = input(title="ATR (Period)",type=input.integer,minval=1,maxval=500,step=1,defval=14,confirm=false)
+ent_canc = input(title="Cancel Entry After X Bars (Period)",type=input.integer,minval=1,maxval=500,step=1,defval=3,confirm=false)
+
+// Create Indicators
+slowSMA = sma(close, sma_slow)
+medmEMA = ema(close, ema_medm)
+fastEMA = ema(close, ema_fast)
+bullishPinBar = ((close > open) and ((open - low) > 0.66 * (high - low))) or ((close < open) and ((close - low) > 0.66 * (high - low)))
+bearishPinBar = ((close > open) and ((high - close) > 0.66 * (high - low))) or ((close < open) and ((high - open) > 0.66 * (high - low)))
+atr = atr(atr_valu)
+
+// Specify Trend Conditions
+fanUpTrend = (fastEMA > medmEMA) and (medmEMA > slowSMA)
+fanDnTrend = (fastEMA < medmEMA) and (medmEMA < slowSMA)
+
+// Specify Piercing Conditions
+bullPierce = ((low < fastEMA) and (open > fastEMA) and (close > fastEMA)) or ((low < medmEMA) and (open > medmEMA) and (close > medmEMA)) or ((low < slowSMA) and (open > slowSMA) and (close > slowSMA))
+bearPierce = ((high > fastEMA) and (open < fastEMA) and (close < fastEMA)) or ((high > medmEMA) and (open < medmEMA) and (close < medmEMA)) or ((high > slowSMA) and (open < slowSMA) and (close < slowSMA))
+    
+// Specify Entry Conditions
+longEntry = fanUpTrend and bullishPinBar and bullPierce
+shortEntry = fanDnTrend and bearishPinBar and bearPierce
+
+// Long Entry Function
+enterlong() =>
+    risk = usr_risk * 0.01 * strategy.equity
+    stopLoss = low[1] - atr[1] * atr_mult
+    entryPrice = high[1]
+    units = risk / (entryPrice - stopLoss)
+    strategy.entry("long", strategy.long, units, stop=entryPrice)
+    strategy.exit("exit long", from_entry="long", trail_points=slPoints, trail_offset=slOffset)
+    
+// Short Entry Function
+entershort() =>
+    risk = usr_risk * 0.01 * strategy.equity
+    stopLoss = high[1] + atr[1] * atr_mult
+    entryPrice = low[1]
+    units = risk / (stopLoss - entryPrice)
+    strategy.entry("short", strategy.short, units, stop=entryPrice)
+    strategy.exit("exit short", from_entry="short", trail_points=slPoints, trail_offset=slOffset)
+    
+// Execute Long Entry
+if (longEntry)
+    enterlong()
+
+// Execute Short Entry
+if (shortEntry)
+    entershort() 
+    
+// Cancel the Entry if Bar Time is Exceeded
+strategy.cancel("long", barssince(longEntry) > ent_canc)
+strategy.cancel("short", barssince(shortEntry) > ent_canc)
+
+// Force Close During Certain Conditions
+strategy.close_all(when = hour==16 and dayofweek==dayofweek.friday, comment = "exit all, market-closed")
+strategy.close_all(when = crossunder(fastEMA, medmEMA), comment = "exit long, re-cross")
+strategy.close_all(when = crossover(fastEMA, medmEMA), comment = "exit short, re-cross")
+
+// Plot Moving Averages to Chart
+plot(fastEMA, color=color.red)
+plot(medmEMA, color=color.blue)
+plot(slowSMA, color=color.green)
+
+// Plot Pin Bars to Chart
+plotshape(bullishPinBar, text='Bull PB', style=shape.labeldown, location=location.abovebar, color=color.green, textcolor=color.white, transp=0)
+plotshape(bearishPinBar, text='Bear PB', style=shape.labelup, location=location.belowbar, color=color.red, textcolor=color.white, transp=0)
+
+// Plot Days of Week
+plotshape(hour==0 and dayofweek==dayofweek.monday, text='Monday', style=shape.labeldown, location=location.abovebar, color=color.black, textcolor=color.white, transp=0)
+plotshape(hour==0 and dayofweek==dayofweek.tuesday, text='Tuesday', style=shape.labeldown, location=location.abovebar, color=color.black, textcolor=color.white, transp=0)
+plotshape(hour==0 and dayofweek==dayofweek.wednesday, text='Wednesday', style=shape.labeldown, location=location.abovebar, color=color.black, textcolor=color.white, transp=0)
+plotshape(hour==0 and dayofweek==dayofweek.thursday, text='Thursday', style=shape.labeldown, location=location.abovebar, color=color.black, textcolor=color.white, transp=0)
+plotshape(hour==0 and dayofweek==dayofweek.friday, text='Friday', style=shape.labeldown, location=location.abovebar, color=color.black, textcolor=color.white, transp=0)
+plotshape(hour==16 and dayofweek==dayofweek.friday, text='Market Closed', style=shape.labeldown, location=location.abovebar, color=color.black, textcolor=color.white, transp=0)
+
+
+
+
+
+
+
+
+
+study("SPY Moving Averages and Signals", shorttitle="OM's MAs & Signals", overlay = true)
+
+//@version=4
+// Version 2.4
+// Author: ColeJustice
+// Based on OptionMillionaire's preferred moving averages when day trading SPY options.
+//
+// This indicator shows the crossing point of two moving average. 
+// OM uses the EMA(8) and EMA(21), so those are the defaults.
+// The basic signals are:
+//  - 8ema crossing over 21ema is bullish
+//  - 8ema crossing under 21ema is bearish
+//  NOTE: Optimized for the 5m timeframe.
+
+priceSource = input(close, title="Price Source For The Moving Averages", group="General")
+IgnoreExtendedHours = input(true, title="Ignore Extended Hours", group="General")
+resolution = timeframe.period
+price = security(syminfo.tickerid, resolution, priceSource)
+
+shortMAPeriod = input(8,  title="Short Moving Average Period & Type:", group="Crossover Moving Averages", inline="short")
+shortMAType   = input(defval="EMA", title="", type=input.string, confirm=false, options=["EMA","SMA","WMA","HMA","ALMA","LIN","ZLMA"], group="Crossover Moving Averages", inline="short")
+longMAPeriod  = input(21, title=" Long Moving Average Period & Type :", group="Crossover Moving Averages", inline="long")
+longMAType    = input(defval="EMA", title="", type=input.string, confirm=false, options=["EMA","SMA","WMA","HMA","ALMA","LIN","ZLMA"],  group="Crossover Moving Averages", inline="long")
+i_timeframe_signal = input(title="Crossover MAs Timeframe", type=input.resolution, defval="", group="Crossover Moving Averages")
+useTextLabels = input(true, title="Use Text-Based Crossover Labels?", group="Crossover Moving Averages")
+
+showBonusMA1     = input(true, title="Bonus MA", group="Bonus Moving Averages", inline="bma1")
+bonusMA1Period   = input(34,  title="", group="Bonus Moving Averages", inline="bma1")
+bonus1MAType     = input(defval="EMA", title="", type=input.string, confirm=false, options=["EMA","SMA","WMA","HMA","ALMA","LIN","ZLMA"], group="Bonus Moving Averages", inline="bma1")
+i_timeframe_bma1 = input(title="", type=input.resolution, defval="", group="Bonus Moving Averages", inline="bma1")
+showBonusMA2     = input(false, title="Bonus MA", group="Bonus Moving Averages",inline= "bma2")
+bonusMA2Period   = input(50, title="", group="Bonus Moving Averages", inline="bma2")
+bonus2MAType     = input(defval="SMA", title="", type=input.string, confirm=false, options=["EMA","SMA","WMA","HMA","ALMA","LIN","ZLMA"], group="Bonus Moving Averages", inline="bma2")
+i_timeframe_bma2 = input(title="", type=input.resolution, defval="", group="Bonus Moving Averages", inline="bma2")
+showBonusMA3     = input(false, title="Bonus MA", group="Bonus Moving Averages", inline="bma3")
+bonusMA3Period   = input(100, title="", group="Bonus Moving Averages", inline="bma3")
+bonus3MAType     = input(defval="SMA", title="", type=input.string, confirm=false, options=["EMA","SMA","WMA","HMA","ALMA","LIN","ZLMA"], group="Bonus Moving Averages", inline="bma3")
+i_timeframe_bma3 = input(title="", type=input.resolution, defval="", group="Bonus Moving Averages", inline="bma3")
+
+ZLMASmooth = 3
+
+f_security(_sym, _res, _src) => security(_sym, _res, _src[barstate.isrealtime ? 1 : 0], barmerge.gaps_off, lookahead=barmerge.lookahead_off)[barstate.isrealtime ? 0 : 1]
+
+ticker = tickerid(syminfo.prefix, syminfo.ticker, IgnoreExtendedHours ? session.regular : syminfo.session)
+
+// MA calculation
+short = shortMAType == "SMA"  ? f_security(ticker, i_timeframe_signal, sma(price, shortMAPeriod)) : 
+     shortMAType    == "EMA"  ? f_security(ticker, i_timeframe_signal, ema(price, shortMAPeriod)) :
+     shortMAType    == "WMA"  ? f_security(ticker, i_timeframe_signal, wma(price, shortMAPeriod)) :
+     shortMAType    == "HMA"  ? f_security(ticker, i_timeframe_signal, hma(price, shortMAPeriod)) :
+     shortMAType    == "ALMA" ? f_security(ticker, i_timeframe_signal, alma(price, shortMAPeriod, 0.85, 6)) :
+     shortMAType    == "LIN"  ? f_security(ticker, i_timeframe_signal, linreg(price, shortMAPeriod, 0)) :
+     shortMAType    == "ZLMA" ? f_security(ticker, i_timeframe_signal, (2 * wma(wma(price, shortMAPeriod),ZLMASmooth)) - wma(wma(wma(price, shortMAPeriod),ZLMASmooth), shortMAPeriod)) : na
+        
+long = longMAType == "SMA"  ? f_security(ticker, i_timeframe_signal, sma(price, longMAPeriod)) :
+     longMAType   == "EMA"  ? f_security(ticker, i_timeframe_signal, ema(price, longMAPeriod)) :
+     longMAType   == "WMA"  ? f_security(ticker, i_timeframe_signal, wma(price, longMAPeriod)) :
+     longMAType   == "HMA"  ? f_security(ticker, i_timeframe_signal, hma(price, longMAPeriod)) :
+     longMAType   == "ALMA" ? f_security(ticker, i_timeframe_signal, alma(price, longMAPeriod, 0.85, 6))  :
+     longMAType   == "LIN"  ? f_security(ticker, i_timeframe_signal, linreg(price, longMAPeriod, 0)) :
+     longMAType   == "ZLMA" ? f_security(ticker, i_timeframe_signal, (2 * wma(wma(price, longMAPeriod),ZLMASmooth)) - wma(wma(wma(price, longMAPeriod),ZLMASmooth), longMAPeriod)) : na
+
+bonus1 = bonus1MAType == "SMA"  ? f_security(ticker, i_timeframe_bma1, sma(price, bonusMA1Period)) :
+     bonus1MAType     == "EMA"  ? f_security(ticker, i_timeframe_bma1, ema(price, bonusMA1Period)) :
+     bonus1MAType     == "WMA"  ? f_security(ticker, i_timeframe_bma1, wma(price, bonusMA1Period)) :
+     bonus1MAType     == "HMA"  ? f_security(ticker, i_timeframe_bma1, hma(price, bonusMA1Period)) :
+     bonus1MAType     == "ALMA" ? f_security(ticker, i_timeframe_bma1, alma(price, bonusMA1Period, 0.85, 6))  :
+     bonus1MAType     == "LIN"  ? f_security(ticker, i_timeframe_bma1, linreg(price, bonusMA1Period, 0)) :
+     bonus1MAType     == "ZLMA" ? f_security(ticker, i_timeframe_bma1, (2 * wma(wma(price, bonusMA1Period),ZLMASmooth)) - wma(wma(wma(price, bonusMA1Period),ZLMASmooth), bonusMA1Period)) : na
+     
+bonus2 = bonus2MAType == "SMA"  ? f_security(ticker, i_timeframe_bma2, sma(price, bonusMA2Period)) :
+     bonus2MAType     == "EMA"  ? f_security(ticker, i_timeframe_bma2, ema(price, bonusMA2Period)) :
+     bonus2MAType     == "WMA"  ? f_security(ticker, i_timeframe_bma2, wma(price, bonusMA2Period)) :
+     bonus2MAType     == "HMA"  ? f_security(ticker, i_timeframe_bma2, hma(price, bonusMA2Period)) :
+     bonus2MAType     == "ALMA" ? f_security(ticker, i_timeframe_bma2, alma(price, bonusMA2Period, 0.85, 6)) :
+     bonus2MAType     == "LIN"  ? f_security(ticker, i_timeframe_bma2, linreg(price, bonusMA2Period, 0)) :
+     bonus2MAType     == "ZLMA" ? f_security(ticker, i_timeframe_bma2, (2 * wma(wma(price, bonusMA2Period),ZLMASmooth)) - wma(wma(wma(price, bonusMA2Period),ZLMASmooth), bonusMA2Period)) : na
+     
+bonus3 = bonus3MAType == "SMA"  ? f_security(ticker, i_timeframe_bma3, sma(price, bonusMA3Period)) :
+     bonus3MAType     == "EMA"  ? f_security(ticker, i_timeframe_bma3, ema(price, bonusMA3Period)) :
+     bonus3MAType     == "WMA"  ? f_security(ticker, i_timeframe_bma3, wma(price, bonusMA3Period)) :
+     bonus3MAType     == "HMA"  ? f_security(ticker, i_timeframe_bma3, hma(price, bonusMA3Period)) :
+     bonus3MAType     == "ALMA" ? f_security(ticker, i_timeframe_bma3, alma(price, bonusMA3Period, 0.85, 6)) :
+     bonus3MAType     == "LIN"  ? f_security(ticker, i_timeframe_bma3, linreg(price, bonusMA3Period, 0)) :
+     bonus3MAType     == "ZLMA" ? f_security(ticker, i_timeframe_bma3, (2 * wma(wma(price, bonusMA3Period),ZLMASmooth)) - wma(wma(wma(price, bonusMA3Period),ZLMASmooth), bonusMA3Period)) : na
+
+// trend direction/color
+TrendingUp()   => short > long 
+TrendingDown() => short < long 
+Uptrend() => TrendingUp() and TrendingDown()[1]
+Downtrend() => TrendingDown() and TrendingUp()[1]
+trendColor = TrendingUp() ? color.new(color.green , 85) : TrendingDown() ? color.new(color.red , 85) : color.new(color.blue , 85)
+
+MA1 = plot(short, title="Short Period Moving Average", color=#FF00FF, linewidth=2, style=plot.style_line)
+MA2 = plot(long,  title="Long Period Moving Average",  color=#00FF00, linewidth=1, style=plot.style_line)
+fill(MA1, MA2, color=trendColor, title="Short/Long Divergence Fill")
+plot(showBonusMA1 ? bonus1 : na, title="Bonus Moving Average 1", color=#FFFF00, linewidth=1, style=plot.style_line)
+plot(showBonusMA2 ? bonus2 : na, title="Bonus Moving Average 2",  color=#FF0000, linewidth=1, style=plot.style_line)
+plot(showBonusMA3 ? bonus3 : na, title="Bonus Moving Average 3",  color=#00FFFF, linewidth=1, style=plot.style_line)
+
+// Short & Long Moving Averages cross alert
+MAcrossing = cross(short, long) ? short : na
+plot(MAcrossing[0], title = "Calls/Puts Crossing Icon", style = plot.style_cross, linewidth = 3, color=trendColor)
+
+// Bull and Bear Alerts
+Bull = crossover(short, long)
+Bear = crossunder(short, long)
+
+plotshape(Bull, title="Calls Label", color=color.new(color.green, 25),
+     textcolor=useTextLabels ? color.white : color.new(color.white, 100),
+     style=useTextLabels ? shape.labelup : shape.triangleup,
+     text="Calls", location=location.belowbar)
+     
+plotshape(Bear, title="Puts Label", color=color.new(color.red, 25),
+     textcolor=useTextLabels ? color.white : color.new(color.white, 100),
+     style=useTextLabels ? shape.labeldown : shape.triangledown,
+     text="Puts", location=location.abovebar)
+
+
+if Bull
+    alert("Calls Alert: 8ema crossed over 21ema", alert.freq_once_per_bar_close)
+if Bear
+    alert("Puts Alert: 8ema crossed under 21ema", alert.freq_once_per_bar_close)
+
+
+// -- VWAP -- //
+
+showVWAP        = input(true, title="Show VWAP?", group="VWAP")
+showVWAPStdDevs1 = input(false, title="Display Standard Deviation Bands 1", group="VWAP", inline="vwap")
+VWAPStdDevMult1 =  input(1.0, step=0.1, title="", group="VWAP",  inline="vwap")
+showVWAPStdDevs2 = input(false, title="Display Standard Deviation Bands 2", group="VWAP", inline="vwap")
+VWAPStdDevMult2 =  input(2.0, step=0.1, title="", group="VWAP",  inline="vwap")
+fillVWAPBands = input(true, title="Fill VWAP Bands", group="VWAP")
+
+start = security(syminfo.tickerid, "D", time)
+newSession = change(time('D'))
+
+var float sumSrcVol = na
+var float sumVol = na
+var float sumSrcSrcVol = na
+
+
+sumSrcVol := newSession ? hlc3 * volume : hlc3 * volume + sumSrcVol[1]
+sumVol := newSession ? volume : volume + sumVol[1]
+sumSrcSrcVol := newSession ? volume * pow(hlc3, 2) : volume * pow(hlc3, 2) + sumSrcSrcVol[1]
+
+_vwap = sumSrcVol / sumVol
+variance = sumSrcSrcVol / sumVol - pow(_vwap, 2)
+variance := variance < 0 ? 0 : variance
+stDev1 = sqrt(variance) * VWAPStdDevMult1
+stDev2 = sqrt(variance) * VWAPStdDevMult2
+
+plot(showVWAP ? vwap : na, color=color.new(color.white, 60), title = "VWAP", style=plot.style_circles)
+vwap1plot1 = plot(showVWAPStdDevs1 ? vwap - stDev1 : na, color=color.new(color.white, 50), title = "VWAP - Std Dev 1", style=plot.style_line)
+vwap1plot2 = plot(showVWAPStdDevs1 ? vwap + stDev1 : na, color=color.new(color.white, 50), title = "VWAP + Std Dev 1", style=plot.style_line)
+vwap2plot1 = plot(showVWAPStdDevs2 ? vwap - stDev2 : na, color=color.new(color.white, 50), title = "VWAP - Std Dev 2", style=plot.style_line)
+vwap2plot2 = plot(showVWAPStdDevs2 ? vwap + stDev2 : na, color=color.new(color.white, 50), title = "VWAP + Std Dev 2", style=plot.style_line)
+fill(vwap1plot1, vwap1plot2, color=fillVWAPBands ? color.new(color.lime, 92) : na, title="VWAP 1 Fill")
+fill(vwap2plot1, vwap2plot2, color=fillVWAPBands ? color.new(color.aqua, 92) : na, title="VWAP 2 Fill")
+
+// ————— Show warning or HTF reminder, if needed.
+f_tfReminderAndErrorCheck(_userSelectionOfTf, _tfReminder) =>
+    // Get chart's TF.
+    var float _chartTfInMinutes = timeframe.multiplier * (
+      timeframe.isseconds ? 1. / 60             :
+      timeframe.isminutes ? 1.                  :
+      timeframe.isdaily   ? 60. * 24            :
+      timeframe.isweekly  ? 60. * 24 * 7        :
+      timeframe.ismonthly ? 60. * 24 * 30.4375  : na)
+    
+    // Get HTF.
+    float _htfInMinutes = security(syminfo.tickerid, _userSelectionOfTf, _chartTfInMinutes)
+    
+    // Label.
+    string _txt = ""
+    var color _color = na
+    if _chartTfInMinutes > _htfInMinutes
+        // Chart TF is higher than user-selected TF.
+        _txt := "The chart's timeframe\nshould not be greater than " + _userSelectionOfTf
+        _color := color.red
+    else if _tfReminder
+        // Display reminder of HTF.
+        _txt := _userSelectionOfTf
+        _color := color.silver
+    float _y = lowest(50)[1]
+    var label _lbl = label.new(bar_index, _y, _txt, xloc.bar_index, yloc.price, #00000000, label.style_label_left, _color, size.large, text.align_left)
+    if barstate.islast and _txt != ""
+        // Update label.
+        label.set_xy(_lbl, bar_index, _y)
+        label.set_text(_lbl, _txt)
+        label.set_textcolor(_lbl, _color)
+    [_chartTfInMinutes, _htfInMinutes]
+
+f_tfReminderAndErrorCheck(i_timeframe_signal, false)
+f_tfReminderAndErrorCheck(i_timeframe_bma1, false)
+f_tfReminderAndErrorCheck(i_timeframe_bma2, false)
+f_tfReminderAndErrorCheck(i_timeframe_bma3, false)
+
+
+
+
+//@version=4
+//Time Frame: H1
+strategy("Pin Bar Magic v1", overlay=true)
+
+// User Input
+usr_risk = input(title="Equity Risk (%)",type=input.integer,minval=1,maxval=100,step=1,defval=3,confirm=false)
+atr_mult = input(title="Stop Loss (x*ATR, Float)",type=input.float,minval=0.1,maxval=100,step=0.1,defval=0.5,confirm=false)
+slPoints = input(title="Stop Loss Trail Points (Pips)",type=input.integer,minval=1,maxval=1000,step=1,defval=1,confirm=false)
+slOffset = input(title="Stop Loss Trail Offset (Pips)",type=input.integer,minval=1,maxval=1000,step=1,defval=1,confirm=false)
+sma_slow = input(title="Slow SMA (Period)",type=input.integer,minval=1,maxval=500,step=1,defval=50,confirm=false)
+ema_medm = input(title="Medm EMA (Period)",type=input.integer,minval=1,maxval=500,step=1,defval=18,confirm=false)
+ema_fast = input(title="Fast EMA (Period)",type=input.integer,minval=1,maxval=500,step=1,defval=6,confirm=false)
+atr_valu = input(title="ATR (Period)",type=input.integer,minval=1,maxval=500,step=1,defval=14,confirm=false)
+ent_canc = input(title="Cancel Entry After X Bars (Period)",type=input.integer,minval=1,maxval=500,step=1,defval=3,confirm=false)
+
+// Create Indicators
+slowSMA = sma(close, sma_slow)
+medmEMA = ema(close, ema_medm)
+fastEMA = ema(close, ema_fast)
+bullishPinBar = ((close > open) and ((open - low) > 0.66 * (high - low))) or ((close < open) and ((close - low) > 0.66 * (high - low)))
+bearishPinBar = ((close > open) and ((high - close) > 0.66 * (high - low))) or ((close < open) and ((high - open) > 0.66 * (high - low)))
+atr = atr(atr_valu)
+
+// Specify Trend Conditions
+fanUpTrend = (fastEMA > medmEMA) and (medmEMA > slowSMA)
+fanDnTrend = (fastEMA < medmEMA) and (medmEMA < slowSMA)
+
+// Specify Piercing Conditions
+bullPierce = ((low < fastEMA) and (open > fastEMA) and (close > fastEMA)) or ((low < medmEMA) and (open > medmEMA) and (close > medmEMA)) or ((low < slowSMA) and (open > slowSMA) and (close > slowSMA))
+bearPierce = ((high > fastEMA) and (open < fastEMA) and (close < fastEMA)) or ((high > medmEMA) and (open < medmEMA) and (close < medmEMA)) or ((high > slowSMA) and (open < slowSMA) and (close < slowSMA))
+    
+// Specify Entry Conditions
+longEntry = fanUpTrend and bullishPinBar and bullPierce
+shortEntry = fanDnTrend and bearishPinBar and bearPierce
+
+// Long Entry Function
+enterlong() =>
+    risk = usr_risk * 0.01 * strategy.equity
+    stopLoss = low[1] - atr[1] * atr_mult
+    entryPrice = high[1]
+    units = risk / (entryPrice - stopLoss)
+    strategy.entry("long", strategy.long, units, stop=entryPrice)
+    strategy.exit("exit long", from_entry="long", trail_points=slPoints, trail_offset=slOffset)
+    
+// Short Entry Function
+entershort() =>
+    risk = usr_risk * 0.01 * strategy.equity
+    stopLoss = high[1] + atr[1] * atr_mult
+    entryPrice = low[1]
+    units = risk / (stopLoss - entryPrice)
+    strategy.entry("short", strategy.short, units, stop=entryPrice)
+    strategy.exit("exit short", from_entry="short", trail_points=slPoints, trail_offset=slOffset)
+    
+// Execute Long Entry
+if (longEntry)
+    enterlong()
+
+// Execute Short Entry
+if (shortEntry)
+    entershort() 
+    
+// Cancel the Entry if Bar Time is Exceeded
+strategy.cancel("long", barssince(longEntry) > ent_canc)
+strategy.cancel("short", barssince(shortEntry) > ent_canc)
+
+// Force Close During Certain Conditions
+strategy.close_all(when = hour==16 and dayofweek==dayofweek.friday, comment = "exit all, market-closed")
+strategy.close_all(when = crossunder(fastEMA, medmEMA), comment = "exit long, re-cross")
+strategy.close_all(when = crossover(fastEMA, medmEMA), comment = "exit short, re-cross")
+
+// Plot Moving Averages to Chart
+plot(fastEMA, color=color.red)
+plot(medmEMA, color=color.blue)
+plot(slowSMA, color=color.green)
+
+// Plot Pin Bars to Chart
+plotshape(bullishPinBar, text='Bull PB', style=shape.labeldown, location=location.abovebar, color=color.green, textcolor=color.white, transp=0)
+plotshape(bearishPinBar, text='Bear PB', style=shape.labelup, location=location.belowbar, color=color.red, textcolor=color.white, transp=0)
+
+// Plot Days of Week
+plotshape(hour==0 and dayofweek==dayofweek.monday, text='Monday', style=shape.labeldown, location=location.abovebar, color=color.black, textcolor=color.white, transp=0)
+plotshape(hour==0 and dayofweek==dayofweek.tuesday, text='Tuesday', style=shape.labeldown, location=location.abovebar, color=color.black, textcolor=color.white, transp=0)
+plotshape(hour==0 and dayofweek==dayofweek.wednesday, text='Wednesday', style=shape.labeldown, location=location.abovebar, color=color.black, textcolor=color.white, transp=0)
+plotshape(hour==0 and dayofweek==dayofweek.thursday, text='Thursday', style=shape.labeldown, location=location.abovebar, color=color.black, textcolor=color.white, transp=0)
+plotshape(hour==0 and dayofweek==dayofweek.friday, text='Friday', style=shape.labeldown, location=location.abovebar, color=color.black, textcolor=color.white, transp=0)
+plotshape(hour==16 and dayofweek==dayofweek.friday, text='Market Closed', style=shape.labeldown, location=location.abovebar, color=color.black, textcolor=color.white, transp=0)
+
+
+
+
+
+
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © LonesomeTheBlue
+
+//@version=4
+study("Market Profile", "MP/TPO", overlay = true, max_lines_count = 500, max_bars_back = 1000)
+TimeframeU = input(defval = 'Auto', title ="Higher Time Frame", options = ['Auto', '1', '5', '10', '15', '30', '60', '120', '180', '240', '360', '480', '720', 'D', 'W', '2W', 'M', '3M', '6M', '12M'])
+percent = input(70.0, title="Percent for Value Area %", type = input.float, minval = 1, maxval = 100) / 100
+showpocline = input(true, title="Show POC Line")
+keepoldmp = input(true, title="Keep Old MPs")
+showwhat = input(defval = "Show All Channels", title="Show", options = ["Don't Show Value Area", "Show Value Area High", "Show All Channels"])
+linewdth = input(defval = 2, title = "Line Width", minval = 1, maxval = 4)
+srate = input(defval = 100., title = "Sizing Rate %", minval = 10, maxval = 500) / 100
+poc_col = input(defval = color.yellow, title = "POC Line Color", type = input.color)
+vah_col = input(defval = color.blue, title = "Value Area Color", type = input.color)
+nonva_col = input(defval = color.gray, title = "Non-Value Area Color", type = input.color)
+
+Timeframe = timeframe.period
+if TimeframeU == 'Auto'
+    Timeframe := timeframe.period == '1' ? '120' : 
+           timeframe.period == '2' ? '180' :
+           timeframe.period == '3' ? '240' : 
+           timeframe.period == '5' ? 'D' : 
+           timeframe.period == '10' ? 'W' : 
+           timeframe.period == '15' ? 'W' : 
+           timeframe.period == '30' ? 'W' : 
+           timeframe.period == '45' ? 'W' : 
+           timeframe.period == '60' ? 'W' : 
+           timeframe.period == '120' ? 'M' : 
+           timeframe.period == '180' ? 'M' : 
+           timeframe.period == '240' ? 'M' : 
+           timeframe.period == 'D' ? '12M' :
+           timeframe.period == 'W' ? '12M' :
+           'D'
+else
+    Timeframe := TimeframeU
+    
+var float highesthtf = na
+var float lowesthtf = na
+var float highest = high
+var float lowest = low
+var int barnum = 0
+var int len = 0
+bool newbar = change(time(Timeframe)) != 0
+
+if newbar // new bar in htf
+    highesthtf := high
+    lowesthtf := low
+    barnum := 0
+else
+    highesthtf := max(highesthtf, high)
+    lowesthtf := min(lowesthtf, low)
+    barnum := barnum + 1
+    
+if newbar // new bar in htf
+    highest := highesthtf[1]
+    lowest := lowesthtf[1]
+    len := barnum[1]
+
+float channel = (highest - lowest) / 20
+
+included(t1, t2, t3, t4)=>
+    _ret = t3 >= t1 and t3 <= t2 or t4 >= t1 and t4 <= t2 or t3 <= t1 and t4 >= t2
+    
+get_tpo(lower, upper)=>
+    float ret = 0.
+    for x = 1 to len
+        if included(lower, upper, low[x], high[x]) 
+            ret := ret + 1
+    ret
+
+ch = array.new_float(22, 0.)
+if newbar
+    for x = 1 to 20
+        array.set(ch, x, get_tpo(lowest +  (x - 1) * channel, lowest +  x * channel))
+
+get_index(up, down)=>
+    float upval = array.get(ch, up)
+    float downval = array.get(ch, down)
+    [iff(upval >= downval, up, down), max(upval, downval)]
+    
+float total = 0.
+int poc_loc = 0
+float poc_val = 0.
+var int gl_poc_loc = 0
+if newbar
+    for x = 1 to 20
+        cval = array.get(ch, x)
+        total := total + cval
+        if cval >= poc_val
+            poc_val := cval
+            poc_loc := x
+    gl_poc_loc := poc_loc
+    
+
