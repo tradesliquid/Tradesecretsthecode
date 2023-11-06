@@ -1,0 +1,2235 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Varian_C
+
+//@version=4
+study("Pivot Entry", overlay=true)
+// Get user input
+rsiSource = input(title="RSI Source", type=input.source, defval=close)
+rsiLength = input(title="RSI Length", type=input.integer, defval=14)
+rsiOverbought = input(title="RSI Overbought Level", type=input.integer, defval=60)
+rsiOversold = input(title="RSI Oversold Level", type=input.integer, defval=40)
+ttmLow = input(title="TTM Low", type=input.integer, defval=-1)
+ttmHigh = input(title="TTM High", type=input.integer, defval=1)
+// Get RSI Value
+rsiValue = rsi(rsiSource, rsiLength)
+isRsiOB = rsiValue >= rsiOverbought
+isRsiOS = rsiValue <= rsiOversold
+// TTM SQUEEZE
+length = input(title="TTM Length", type=input.integer, defval=20, minval=0) 
+bband(length, mult) =>
+	sma(close, length) + mult * stdev(close, length)
+keltner(length, mult) =>
+	ema(close, length) + mult * ema(tr, length)
+
+e1 = (highest(high, length) + lowest(low, length)) / 2 + sma(close, length)
+osc = linreg(close - e1 / 2, length, 0)
+diff = bband(length, 2) - keltner(length, 1)
+ttmL = osc < ttmLow and rsiValue <= rsiOversold
+ttmH = osc > ttmHigh and rsiValue >= rsiOverbought
+// Plot signals to chart
+plotshape(ttmH, title="Overbought", location=location.abovebar, color=color.red, style=shape.arrowdown)
+plotshape(ttmL, title="Oversold", location=location.belowbar, color=color.green, style=shape.arrowup)
+
+
+
+//This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+//© MattDeLong
+
+//@version=4
+study("10ema", overlay=true)
+ema10 = security(syminfo.tickerid, '1D', ema(close, 10))
+ema50 = security(syminfo.tickerid, '1D', ema(close, 50))
+plot(ema10, linewidth=1, color=color.blue, editable=true)
+plot(ema50, linewidth=2, color=color.green, editable=true)
+
+//breakAbove = (close > ema10 and close[1] <= ema10[1]) ? 1 : 0
+//breakBelow = (close < ema10 and close[1] >= ema10[1]) ? 1 : 0
+//plotshape((breakBelow[1] or breakBelow[2]) and breakAbove, style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small)
+plotshape(close[1] < ema10[1] and close > ema10 and close > ema50 and ema10>ema50, style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small)
+
+
+
+
+//@version=4
+
+// Get user input
+botName     = input(title="Bot Name", type=input.string, defval="TradingView", tooltip="The display name for this webhook bot")
+avatarURL   = input(title="Avatar URL", type=input.string, defval="https://pbs.twimg.com/profile_images/1418656582888525833/p4fZd3KR.jpg", tooltip="Your preferred Avatar image URL")
+iconURL     = input(title="Icon URL", type=input.string, defval="https://theartoftrading.com/files/discord/zentradingcircle.png", tooltip="Your preferred message icon image URL")
+titleURL    = input(title="Title URL", type=input.string, defval="https://www.tradingview.com/chart/", tooltip="Where you want the title of the message to link to")
+message     = input(title="Message", type=input.string, defval="", tooltip="Optional message to add before the role tag & embed info")
+role        = input(title="Role ID", type=input.string, defval="", tooltip="The role ID you want to ping when this message is sent to discord (optional)")
+embedColor  = input(title="Embed Color", type=input.string, defval="", tooltip="Your embed color (decimal color only - not HEX or RGB!)")
+volatility  = input(title="Volatility Alerts?", type=input.bool, defval=true, tooltip="Turns on/off intraday volatility alerts")
+
+// Declare constant variables
+var ROLE_ID = role == "" ? "" : " (<@&" + role + ">)"
+var ICON1_URL = syminfo.type == "forex" ? ("https://theartoftrading.com/files/discord/flags/" + syminfo.basecurrency + ".png") : iconURL
+var ICON2_URL = syminfo.type == "forex" ? ("https://theartoftrading.com/files/discord/flags/" + syminfo.currency + ".png") : ""
+var MARKET = syminfo.type == "forex" or syminfo.type == "crypto" ? syminfo.basecurrency : syminfo.ticker
+
+// Get market data to send to discord
+mktChange = (change(close) / close[1]) * 100
+mktRSI = rsi(close, 14)
+
+// Custom function to truncate (cut) excess decimal places
+truncate(_number, _decimalPlaces) =>
+    _factor = pow(10, _decimalPlaces)
+    int(_number * _factor) / _factor
+    
+// Custom function to convert pips into whole numbers
+atr = atr(14)
+toWhole(_number) =>
+    _return = atr < 1.0 ? (_number / syminfo.mintick) / (10 / syminfo.pointvalue) : _number
+    _return := atr >= 1.0 and atr < 100.0 and syminfo.currency == "JPY" ? _return * 100 : _return
+
+// Generate discord embed JSON
+getDiscordEmbedJSON(_color, _author, _title, _url, _icon_url, _icon2_url, _footer, _description) =>
+    botTxt = "\"username\":\"" + botName + "\",\"avatar_url\":\"" + avatarURL + "\","
+    tagTxt = message == "" and role == "" ? "" : ("\"content\":\"" + (message == "" ? "" : message + " ") + ROLE_ID + "\",")
+    returnString = "{" + botTxt + tagTxt + "\"embeds\":[{\"title\":\""+_title+"\",\"url\":\""+_url+"\",\"color\":"+
+      _color+",\"description\":\""+_description+"\",\"author\":{\"name\":\""+_author+
+      "\",\"url\":\""+_url+"\",\"icon_url\":\""+_icon_url+"\"},\"footer\":{\"text\":\""+_footer+"\",\"icon_url\":\""+_icon2_url+"\"}}]}"
+
+// Determine if we have a new bar starting - if so, send our Discord webhook alert
+if barstate.isconfirmed
+    timeframe = (timeframe.isintraday ? timeframe.period + " minute" : timeframe.isdaily ? "Daily" : timeframe.isweekly ? "Weekly" : timeframe.ismonthly ? "Monthly" : timeframe.period) + " timeframe"
+    update = syminfo.ticker + " ended " + (mktChange > 0 ? "up +" : "down ") + tostring(truncate(mktChange,2)) + "% on " + timeframe + " (RSI = " + tostring(truncate(mktRSI,2)) + ")"
+    gainLoss = toWhole(open - close)
+    footer = "Price: " + tostring(close) + " (" + (gainLoss > 0 ? "+" : "") + tostring(gainLoss) + " pips)"
+    gainColor = (embedColor != "" ? embedColor : (mktChange > 0 ? "65280" : "16711680"))
+    content = getDiscordEmbedJSON(gainColor, "Market Update", syminfo.ticker, titleURL, ICON1_URL, ICON2_URL, footer, update)
+    alert(content, alert.freq_once_per_bar)
+
+// Check if we have high intraday volatility - if so, send our Discord webhook alert
+if abs(mktChange) >= 10 and volatility
+    timeframe = (timeframe.isintraday ? timeframe.period + " minute" : timeframe.isdaily ? "Daily" : timeframe.isweekly ? "Weekly" : timeframe.ismonthly ? "Monthly" : timeframe.period) + " timeframe"
+    update = syminfo.ticker + " is " + (mktChange > 0 ? "up +" : "down ") + tostring(truncate(mktChange,2)) + "% [" + tostring(close) + "] on " + timeframe + " (RSI = " + tostring(truncate(mktRSI,2)) + ")"
+    gainLoss = toWhole(open - close)
+    footer = "Price: " + tostring(close) + " (" + (gainLoss > 0 ? "+" : "") + tostring(gainLoss) + " pips)"
+    gainColor = (embedColor != "" ? embedColor : (mktChange > 0 ? "65280" : "16711680"))
+    content = getDiscordEmbedJSON(gainColor, "High Volatility Alert", syminfo.ticker, titleURL, ICON1_URL, ICON2_URL, footer, update)
+    alert(content, alert.freq_once_per_bar)      
+
+// Prepare table
+var table myTable = table.new(position.middle_right, 1, 1, border_width=1)
+f_fillCell(_table, _column, _row, _title, _value, _bgcolor, _txtcolor) =>
+    _cellText = _title + "\n" + _value
+    table.cell(_table, _column, _row, _cellText, bgcolor=_bgcolor, text_color=_txtcolor)
+
+// Draw table
+if barstate.islast
+    f_fillCell(myTable, 0, 0, "Market:", MARKET + " (" + syminfo.type + ")", color.new(color.black,0), color.white)")
+plot(close)
+
+
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Shootda
+//@version=4
+study("Hammer Candle Identifier", overlay=true)
+//Get user input
+rsiSource = input(title="RSI Source", type=input.source, defval=close)
+rsiLength = input(title="RSI Length", type=input.integer, defval=14)
+rsiOverbought = input(title="RSI Overbought Level", type=input.integer, defval=80)
+rsiOversold = input(title="RSI Oversold Level", type=input.integer, defval=20)
+rsiBelow100 = input(title="RSI Trigger Below 100 EMA", type=input.integer, defval=40)
+rsiAbove100 = input(title="RSI Trigger Above 100 EMA", type=input.integer, defval=50)
+//Get RSI Value
+rsiValue = rsi(rsiSource, rsiLength)
+isRsiOB = rsiValue >= rsiOverbought
+isRsiOS = rsiValue <= rsiOversold
+isRSIBuyBelow100 = rsiValue <= rsiBelow100
+isRSIBuyAbove100 = rsiValue <= rsiAbove100
+// Get 100 EMA Value
+ema = ema(close, 100)
+//Price above or below 100 EMA
+below_ema = close < ema
+above_ema = close > ema
+//Price close above or below 10 EMA
+ema10 = ema(close,10)
+CloseAbove = close > ema10
+CloseBelow = close < ema10
+//Identify Hammer Candle
+body_top = max(open, close)
+body_bot = min(open, close)
+body = body_top - body_bot
+hat = high - body_top
+tail = body_bot - low
+size = high - low
+atr = rma(tr(true), 14)
+min_size_percent = 1
+min_body_percent = 0.50
+max_hat_percent = 0.25
+hammer_candle = tail >= body * 1.5 and hat / size <= max_hat_percent and tail > hat and low < low[1]
+tradeSignal = ((isRSIBuyBelow100) and hammer_candle and below_ema) or ((isRSIBuyAbove100) and hammer_candle and above_ema)
+tradeSignal2 = CloseAbove[1] and CloseBelow
+tradeSignal11 = CloseBelow[1] and CloseAbove
+//Candle Combinations to form hammers
+//2 Candle Combo
+body_topComb2 = max(open[1],close)
+body_botComb2 = min(open[1],close)
+bodyComb2 = body_topComb2 - body_botComb2
+hatComb2 = max(high[1], high) - body_topComb2
+tailComb2 = body_botComb2 - min(low[1], low)
+sizeComb2 = max(high[1], high) - min(low[1], low)
+hammer2CComb = tailComb2 >= bodyComb2 * 1.5 and hatComb2 / sizeComb2 <= max_hat_percent and tailComb2 > hatComb2 and min(low[1], low) < low[2]
+tradeSignal8 = ((isRSIBuyBelow100) and hammer2CComb and below_ema) or ((isRSIBuyAbove100) and hammer2CComb and above_ema)
+//3 Candle Combo
+body_topComb3 = max(open[2],close)
+body_botComb3 = min(open[2],close)
+bodyComb3 = body_topComb3 - body_botComb3
+hatComb3 = max(high[2], high[1], high) - body_topComb3
+tailComb3 = body_botComb3 - min(low[2], low[1], low)
+sizeComb3 = max(high[2], high[1], high) - min(low[2], low[1], low)
+hammer3CComb = tailComb3 >= bodyComb3 * 1.5 and hatComb3 / sizeComb3 <= max_hat_percent and tailComb3 > hatComb3 and min(low[2], low[1], low) < low[3]
+tradeSignal9 = ((isRSIBuyBelow100) and hammer3CComb and below_ema) or ((isRSIBuyAbove100) and hammer3CComb and above_ema)
+//Identify alert condition
+tradeSignal10 = (isRSIBuyBelow100 and hammer2CComb and below_ema) or (isRSIBuyAbove100 and hammer2CComb and above_ema) or (isRSIBuyBelow100 and hammer3CComb and below_ema) or (isRSIBuyAbove100 and hammer3CComb and above_ema) or (isRSIBuyBelow100 and hammer_candle and below_ema) or (isRSIBuyAbove100 and hammer_candle and above_ema)
+//Identify Prior Bearish Candle
+Bear_C = open > close and high - low >= atr/2 and high - open <= (high - low) * 0.15 and close - low <= (high - low) * 0.15 and low < low[1]
+// Plot signals to chart
+plotshape(hammer_candle, title="Hammer Candel Detected", location=location.abovebar, color=color.blue, transp=0, style=shape.triangleup, text="HC")
+plotshape(tradeSignal and hammer_candle, title="Buy Trade Signal", location=location.belowbar, color=color.green, transp=0, style=shape.triangleup, text="Buy")
+plotshape(isRsiOB, title="Overbought", location=location.abovebar, color=color.red, transp=0, style=shape.circle)
+plotshape(isRsiOS, title="Oversold", location=location.abovebar, color=color.green, transp=0, style=shape.circle)
+plotshape(hammer2CComb, title="2 Candle Combined Hammer Detected", location=location.abovebar, color=color.blue, transp=0, text = "2CH")
+plotshape(tradeSignal8 and hammer2CComb, title="Combined 2 Candle Hammer", location=location.belowbar, color=color.green, transp=0, style=shape.triangleup, text="Buy 2CH")
+plotshape(hammer3CComb, title="3 Candle Combined Hammer Detected", location=location.abovebar, color=color.blue, transp=0, text="3CH")
+plotshape(tradeSignal9 and hammer3CComb, title="Combined 3 Candle Hammer", location=location.belowbar, color=color.green, transp=0, style=shape.triangleup, text="Buy 3CH")
+// Plot EMA's to chart
+len1 = input(10, minval=1, title="Length")
+src1 = input(close, title="Source")
+ema1 = ema(src1, len1)
+plot(ema1, title="EMA 10", color=color.yellow, linewidth=2)
+len2 = input(20, minval=1, title="Length")
+src2 = input(close, title="Source")
+ema2 = ema(src2, len2)
+plot(ema2, title="EMA 20", color=color.white, linewidth=2)
+len3 = input(50, minval=1, title="Length")
+src3 = input(close, title="Source")
+ema3 = ema(src3, len3)
+plot(ema3, title="EMA 50", color=color.green, linewidth=2)
+len4 = input(100, minval=1, title="Length")
+src4 = input(close, title="Source")
+ema4 = ema(src4, len4)
+plot(ema4, title="EMA 100", color=color.purple, linewidth=2)
+len5 = input(200, minval=1, title="Length")
+src5 = input(close, title = "Source")
+sma5 = sma(src5, len5)
+plot(sma5, title="SMA 200", color=color.black, linewidth=2)
+len6 = input(100, minval=1, title="Length")
+src6 = input(close, title = "Source")
+sma6 = sma(src6, len6)
+plot(sma6, title="SMA 100", color=color.blue, linewidth=2)
+// Send out an alert if this candle meets our conditions
+alertcondition(tradeSignal, title="Hammer RSI Signal", message="RSI & Hammer Signal Detected")
+alertcondition(tradeSignal2, title="Close Below 10 EMA", message="Price close below 10 EMA")
+alertcondition(tradeSignal10, title="Candle Pattern Alert", message="Candle Pattern Detected")
+alertcondition(tradeSignal8, title="2 Candle Hammer Alert", message="2 Candle Hammer Detected")
+alertcondition(tradeSignal9, title="3 Candle Hammer Alert", message="3 Candle Hammer Detected")
+alertcondition(tradeSignal11, title="Close Above 10 EMA", message="Price close above 10 EMA")
+
+
+
+
+
+//lineColour = input(title="P,S,R Colour", type=input.color, defval=color.blue)
+//midlineColour = input(title="Mid Line Colour", type=input.color, defval=color.blue)
+// function to create the line and set the options, label etc.
+// inputs:// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Ross702
+
+//@version=5
+indicator('Ross702 Custom Indicator', overlay=true)
+
+rsiSource = input(title='RSI Source', defval=close)
+rsiLength = input(title='RSI Length', defval=14)
+rsiOverbought = input(title='RSI Overbought Level', defval=80)
+rsiOversold = input(title='RSI Oversold Level', defval=20)
+rsiBelow100 = input(title='RSI Trigger Below 100 EMA', defval=40)
+rsiAbove100 = input(title='RSI Trigger Above 100 EMA', defval=50)
+
+//Get RSI Value
+rsiValue = ta.rsi(rsiSource, rsiLength)
+isRsiOB = rsiValue >= rsiOverbought
+isRsiOS = rsiValue <= rsiOversold
+isRSIBuyBelow100 = rsiValue <= rsiBelow100
+isRSIBuyAbove100 = rsiValue <= rsiAbove100
+
+// Get 100 EMA Value
+ema = ta.ema(close, 100)
+
+//Price above or below 100 EMA
+below_ema = close < ema
+above_ema = close > ema
+
+//Price close above or below 10 EMA
+ema10 = ta.ema(close, 10)
+CloseAbove = close > ema10
+CloseBelow = close < ema10
+
+//Identify Hammer Candle
+body_top = math.max(open, close)
+body_bot = math.min(open, close)
+body = body_top - body_bot
+hat = high - body_top
+tail = body_bot - low
+size = high - low
+atr = ta.rma(ta.tr(true), 14)
+min_size_percent = 1
+min_body_percent = 0.50
+max_hat_percent = 0.25
+hammer_candle = tail >= body * 1.5 and hat / size <= max_hat_percent and tail > hat and low < low[1]
+tradeSignal = isRSIBuyBelow100 and hammer_candle and below_ema or isRSIBuyAbove100 and hammer_candle and above_ema
+tradeSignal2 = CloseAbove[1] and CloseBelow
+tradeSignal11 = CloseBelow[1] and CloseAbove
+
+//Identify alert condition
+tradeSignal10 = isRSIBuyBelow100 and hammer_candle and below_ema or isRSIBuyAbove100 and hammer_candle and above_ema
+
+//Identify Prior Bearish Candle
+Bear_C = open > close and high - low >= atr / 2 and high - open <= (high - low) * 0.15 and close - low <= (high - low) * 0.15 and low < low[1]
+
+// Plot signals to chart
+plotshape(hammer_candle, title='Hammer Candle Detected', location=location.abovebar, color=color.new(color.blue, 0), style=shape.triangleup, text='HC')
+plotshape(tradeSignal and hammer_candle, title='Buy Trade Signal', location=location.belowbar, color=color.new(color.green, 0), style=shape.triangleup, text='Buy')
+plotshape(isRsiOB, title='Overbought', location=location.abovebar, color=color.new(color.red, 0), style=shape.circle)
+plotshape(isRsiOS, title='Oversold', location=location.abovebar, color=color.new(color.green, 0), style=shape.circle)
+
+
+// Plot EMA's to chart
+len1 = input.int(8, minval=1, title='EMA 1 Length')
+src1 = input(close, title='EMA 1 Source')
+ema1 = ta.ema(src1, len1)
+plot(ema1, title='EMA 8', color=color.rgb(98, 98, 95, 100), linewidth=2)
+len2 = input.int(13, minval=1, title='EMA 2 Length')
+src2 = input(close, title='EMA 2 Source')
+ema2 = ta.ema(src2, len2)
+plot(ema2, title='EMA 13', color=color.new(#04ffff, 0), linewidth=2)
+len3 = input.int(34, minval=1, title='EMA 3 Length')
+src3 = input(close, title='EMA 3 Source')
+ema3 = ta.ema(src3, len3)
+plot(ema3, title='EMA 34', color=color.new(#fe04f6, 0), linewidth=2)
+len4 = input.int(100, minval=0, title='EMA 4 Length')
+src4 = input(close, title='EMA 4 Source')
+ema4 = ta.ema(src4, len4)
+plot(ema4, title='EMA 100', color=color.new(#f00404, 0), linewidth=2)
+len5 = input.int(200, minval=0, title='SMA 1 Length')
+src5 = input(close, title='SMA 1 Source')
+sma5 = ta.sma(src5, len5)
+plot(sma5, title='SMA 200', color=color.new(#048007, 0), linewidth=2)
+len6 = input.int(100, minval=0, title='SMA 2 Length')
+src6 = input(close, title='SMA 2 Source')
+sma6 = ta.sma(src6, len6)
+plot(sma6, title='SMA 100', color=color.new(#070373, 0), linewidth=2)
+
+// Send out an alert if this candle meets our conditions
+alertcondition(tradeSignal, title='Hammer RSI Signal', message='RSI & Hammer Signal Detected')
+alertcondition(tradeSignal2, title='Close Below 10 EMA', message='Price close below 10 EMA')
+alertcondition(tradeSignal10, title='Candle Pattern Alert', message='Candle Pattern Detected')
+alertcondition(tradeSignal11, title='Close Above 10 EMA', message='Price close above 10 EMA')
+
+//PIVOT Indicator Code Starts Here
+CreateLineStyle(styleText) =>
+    lineStyle = styleText == 'dotted (┈)' ? line.style_dotted : styleText == 'dashed (╌)' ? line.style_dashed : styleText == 'Hidden' ? 'Hidden' : line.style_solid
+    lineStyle
+
+lblsOnRight = input(title='Display labels on right', defval=true)
+showPrice = input(title='Show price (if not shown, hover over label to view price)', defval=true)
+
+pLineStyle = CreateLineStyle(input.string(title='P', inline='pLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+plineColour = input.color(title='', defval=color.blue, inline='pLine')
+plineWgt = input.int(title='', defval=3, minval=1, inline='pLine')
+
+r1LineStyle = CreateLineStyle(input.string(title='R1', inline='r1Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+r1lineColour = input.color(title='', defval=color.blue, inline='r1Line')
+r1lineWgt = input.int(title='', defval=1, minval=1, inline='r1Line')
+
+r2LineStyle = CreateLineStyle(input.string(title='R2', inline='r2Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+r2lineColour = input.color(title='', defval=color.blue, inline='r2Line')
+r2lineWgt = input.int(title='', defval=1, minval=1, inline='r2Line')
+
+r3LineStyle = CreateLineStyle(input.string(title='R3', inline='r3Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+r3lineColour = input.color(title='', defval=color.blue, inline='r3Line')
+r3lineWgt = input.int(title='', defval=1, minval=1, inline='r3Line')
+
+r4LineStyle = CreateLineStyle(input.string(title='R5', inline='r4Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+r4lineColour = input.color(title='', defval=color.blue, inline='r4Line')
+r4lineWgt = input.int(title='', defval=1, minval=1, inline='r4Line')
+
+r5LineStyle = CreateLineStyle(input.string(title='R4', inline='r5Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+r5lineColour = input.color(title='', defval=color.blue, inline='r5Line')
+r5lineWgt = input.int(title='', defval=1, minval=1, inline='r5Line')
+
+s1LineStyle = CreateLineStyle(input.string(title='S1', inline='s1Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+s1lineColour = input.color(title='', defval=color.blue, inline='s1Line')
+s1lineWgt = input.int(title='', defval=1, minval=1, inline='s1Line')
+
+s2LineStyle = CreateLineStyle(input.string(title='S2', inline='s2Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+s2lineColour = input.color(title='', defval=color.blue, inline='s2Line')
+s2lineWgt = input.int(title='', defval=1, minval=1, inline='s2Line')
+
+s3LineStyle = CreateLineStyle(input.string(title='S3', inline='s3Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s3lineColour = input.color(title='', defval=color.blue, inline='s3Line')
+s3lineWgt = input.int(title='', defval=1, minval=1, inline='s3Line')
+
+s4LineStyle = CreateLineStyle(input.string(title='S4', inline='s4Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s4lineColour = input.color(title='', defval=color.blue, inline='s4Line')
+s4lineWgt = input.int(title='', defval=1, minval=1, inline='s4Line')
+
+s5LineStyle = CreateLineStyle(input.string(title='S5', inline='s5Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s5lineColour = input.color(title='', defval=color.blue, inline='s5Line')
+s5lineWgt = input.int(title='', defval=1, minval=1, inline='s5Line')
+
+r1MidLineStyle = CreateLineStyle(input.string(title='R1 Mid', inline='r1MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='dotted (┈)'))
+r1MidlineColour = input.color(title='', defval=color.blue, inline='r1MidLine')
+r1MidlineWgt = input.int(title='', defval=1, minval=1, inline='r1MidLine')
+
+r2MidLineStyle = CreateLineStyle(input.string(title='R2 Mid', inline='r2MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='dotted (┈)'))
+r2MidlineColour = input.color(title='', defval=color.blue, inline='r2MidLine')
+r2MidlineWgt = input.int(title='', defval=1, minval=1, inline='r2MidLine')
+
+r3MidLineStyle = CreateLineStyle(input.string(title='R3 Mid', inline='r3MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r3MidlineColour = input.color(title='', defval=color.blue, inline='r3MidLine')
+r3MidlineWgt = input.int(title='', defval=1, minval=1, inline='r3MidLine')
+
+r4MidLineStyle = CreateLineStyle(input.string(title='R4 Mid', inline='r4MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r4MidlineColour = input.color(title='', defval=color.blue, inline='r4MidLine')
+r4MidlineWgt = input.int(title='', defval=1, minval=1, inline='r4MidLine')
+
+r5MidLineStyle = CreateLineStyle(input.string(title='R5 Mid', inline='r5MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r5MidlineColour = input.color(title='', defval=color.blue, inline='r5MidLine')
+r5MidlineWgt = input.int(title='', defval=1, minval=1, inline='r5MidLine')
+
+s1MidLineStyle = CreateLineStyle(input.string(title='S1 Mid', inline='s1MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='dotted (┈)'))
+s1MidlineColour = input.color(title='', defval=color.blue, inline='s1MidLine')
+s1MidlineWgt = input.int(title='', defval=1, minval=1, inline='s1MidLine')
+
+s2MidLineStyle = CreateLineStyle(input.string(title='S2 Mid', inline='s2MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s2MidlineColour = input.color(title='', defval=color.blue, inline='s2MidLine')
+s2MidlineWgt = input.int(title='', defval=1, minval=1, inline='s2MidLine')
+
+s3MidLineStyle = CreateLineStyle(input.string(title='S3 Mid', inline='s3MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s3MidlineColour = input.color(title='', defval=color.blue, inline='s3MidLine')
+s3MidlineWgt = input.int(title='', defval=1, minval=1, inline='s3MidLine')
+
+s4MidLineStyle = CreateLineStyle(input.string(title='S4 Mid', inline='s4MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s4MidlineColour = input.color(title='', defval=color.blue, inline='s4MidLine')
+s4MidlineWgt = input.int(title='', defval=1, minval=1, inline='s4MidLine')
+
+s5MidLineStyle = CreateLineStyle(input.string(title='S5 Mid', inline='s5MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s5MidlineColour = input.color(title='', defval=color.blue, inline='s5MidLine')
+s5MidlineWgt = input.int(title='', defval=1, minval=1, inline='s5MidLine')
+
+// lineToSet - a reference to the line object to work with
+// level - the price level (y axis) at which to draw the horizontal line
+// width - a number used to set the thickness of the line 
+// colour - the colour of the line - use color.<colour> to set this
+// style - the style of the eg line.style_dotted, line.style_solid etc
+// Returns the line that was created
+CreateTheLine(lineToSet, level, width, colour, style) =>  //, labelText)=>
+    // create the line
+    line.set_x2(lineToSet, bar_index)
+    line.set_extend(lineToSet, extend.none)
+    // return the line
+    line.new(x1=bar_index, y1=level, x2=bar_index, y2=level, width=width, extend=extend.right, color=colour, style=style)
+    //lineToSet 
+
+CreateTheLabel(level, colour, style, labelText) =>
+    // create the label
+    lblText = labelText
+    tooltip = labelText + ' (' + str.tostring(level) + ')'
+
+    if showPrice
+        lblText := tooltip  // include the price in the label
+        lblText
+
+    label.new(bar_index, level, lblText, style=label.style_none, textcolor=colour, textalign=text.align_right, tooltip=tooltip)
+
+// TF = timeframe
+//higherTF = (timeframe.isintraday and timeframe.multiplier < 30) ? input("D", type=input.resolution)  : (timeframe.isintraday and timeframe.multiplier >=30) ? input("W", type=input.resolution) : input("M", type=input.resolution)
+higherTF = timeframe.isintraday and timeframe.multiplier < 30 ? 'D' : timeframe.isintraday and timeframe.multiplier >= 30 ? 'W' : 'M'
+//higherTF = input("D", type=input.resolution)
+// get the high, low, open, close of the higher (1 day) timeframe
+prevCloseHTF = request.security(syminfo.tickerid, higherTF, close[1], lookahead=barmerge.lookahead_on)
+prevOpenHTF = request.security(syminfo.tickerid, higherTF, open[1], lookahead=barmerge.lookahead_on)
+prevHighHTF = request.security(syminfo.tickerid, higherTF, high[1], lookahead=barmerge.lookahead_on)
+prevLowHTF = request.security(syminfo.tickerid, higherTF, low[1], lookahead=barmerge.lookahead_on)
+// pivot level
+pLevel = math.round_to_mintick((prevHighHTF + prevLowHTF + prevCloseHTF) / 3)
+r1Level = math.round_to_mintick(pLevel * 2 - prevLowHTF)
+s1Level = math.round_to_mintick(pLevel * 2 - prevHighHTF)
+r1MidLevel = math.round_to_mintick((pLevel + r1Level) / 2)
+s1MidLevel = math.round_to_mintick((pLevel + s1Level) / 2)
+// calc the range = prev day high - prev day Low
+range_1 = math.round_to_mintick(prevHighHTF - prevLowHTF)
+// levels for the additional Resistance/support levels - calculated as (plevel +/- range*N) where N = Support Level -1
+r2Level = pLevel + range_1
+s2Level = pLevel - range_1
+r2MidLevel = math.round_to_mintick((r2Level + r1Level) / 2)
+s2MidLevel = math.round_to_mintick((s2Level + s1Level) / 2)
+r3Level = math.round_to_mintick(r1Level + range_1)
+s3Level = math.round_to_mintick(s1Level - range_1)
+r3MidLevel = math.round_to_mintick((r3Level + r2Level) / 2)
+s3MidLevel = math.round_to_mintick((s3Level + s2Level) / 2)
+r4Level = math.round_to_mintick(r2Level + range_1)
+s4Level = math.round_to_mintick(s2Level - range_1)
+r4MidLevel = math.round_to_mintick((r4Level + r3Level) / 2)
+s4MidLevel = math.round_to_mintick((s4Level + s3Level) / 2)
+r5Level = math.round_to_mintick(r3Level + range_1)
+s5Level = math.round_to_mintick(s3Level - range_1)
+r5MidLevel = math.round_to_mintick((r5Level + r4Level) / 2)
+s5MidLevel = math.round_to_mintick((s5Level + s4Level) / 2)
+var line pLine = na
+var line r1Line = na
+var line r2Line = na
+var line r3Line = na
+var line r4Line = na
+var line r5Line = na
+var line s1Line = na
+var line s2Line = na
+var line s3Line = na
+var line s4Line = na
+var line s5Line = na
+var line r1MidLine = na
+var line r2MidLine = na
+var line r3MidLine = na
+var line r4MidLine = na
+var line r5MidLine = na
+var line s1MidLine = na
+var line s2MidLine = na
+var line s3MidLine = na
+var line s4MidLine = na
+var line s5MidLine = na
+var label pLabel = na
+var label r1Label = na
+var label r2Label = na
+var label r3Label = na
+var label r4Label = na
+var label r5Label = na
+var label r1MidLabel = na
+var label r2MidLabel = na
+var label r3MidLabel = na
+var label r4MidLabel = na
+var label r5MidLabel = na
+var label s1Label = na
+var label s2Label = na
+var label s3Label = na
+var label s4Label = na
+var label s5Label = na
+var label s1MidLabel = na
+var label s2MidLabel = na
+var label s3MidLabel = na
+var label s4MidLabel = na
+var label s5MidLabel = na
+if pLevel[1] != pLevel
+    if pLineStyle != 'Hidden'
+        pLine := CreateTheLine(pLine, pLevel, plineWgt, plineColour, pLineStyle)  //, "P (" + tostring(pLevel) + ")")
+        pLabel := CreateTheLabel(level=pLevel, colour=plineColour, style=label.style_none, labelText='P')  // (" + tostring(pLevel) + ")")
+        pLabel
+        //pLabel := label.new(bar_index, pLevel, "PTest", style=label.style_none)
+    if r1LineStyle != 'Hidden'
+        r1Line := CreateTheLine(r1Line, r1Level, r1lineWgt, r1lineColour, r1LineStyle)  //, "R1 (" + tostring(r1Level) + ")")
+        r1Label := CreateTheLabel(level=r1Level, colour=r1lineColour, style=label.style_none, labelText='R1')  // (" + tostring(r1Level) + ")")
+        r1Label
+    if r2LineStyle != 'Hidden'
+        r2Line := CreateTheLine(r2Line, r2Level, r2lineWgt, r2lineColour, r2LineStyle)  //, "R2 (" + tostring(r2Level) + ")")
+        r2Label := CreateTheLabel(level=r2Level, colour=r2lineColour, style=label.style_none, labelText='R2')  // (" + tostring(r2Level) + ")")
+        r2Label
+    if r3LineStyle != 'Hidden'
+        r3Line := CreateTheLine(r3Line, r3Level, r3lineWgt, r3lineColour, r3LineStyle)  //, "R3 (" + tostring(r3Level) + ")")
+        r3Label := CreateTheLabel(level=r3Level, colour=r3lineColour, style=label.style_none, labelText='R3')  // (" + tostring(r3Level) + ")")
+        r3Label
+    if r4LineStyle != 'Hidden'
+        r4Line := CreateTheLine(r4Line, r4Level, r4lineWgt, r4lineColour, r4LineStyle)  //, "r4 (" + tostring(r4Level) + ")")
+        r4Label := CreateTheLabel(level=r4Level, colour=r4lineColour, style=label.style_none, labelText='R4')  // (" + tostring(r5Level) + ")")
+        r4Label
+    if r5LineStyle != 'Hidden'
+        r5Line := CreateTheLine(r5Line, r5Level, r5lineWgt, r5lineColour, r5LineStyle)  //, "r5 (" + tostring(r5Level) + ")")
+        r5Label := CreateTheLabel(level=r5Level, colour=r5lineColour, style=label.style_none, labelText='R5')  // (" + tostring(r5Level) + ")")
+        r5Label
+    if s1LineStyle != 'Hidden'
+        s1Line := CreateTheLine(s1Line, s1Level, s1lineWgt, s1lineColour, s1LineStyle)  //, "S1 (" + tostring(s1Level) + ")")
+        s1Label := CreateTheLabel(level=s1Level, colour=s1lineColour, style=label.style_none, labelText='S1')  // (" + tostring(s1Level) + ")")
+        s1Label
+    if s2LineStyle != 'Hidden'
+        s2Line := CreateTheLine(s2Line, s2Level, s2lineWgt, s2lineColour, s2LineStyle)  //, "S2 (" + tostring(s2Level) + ")")
+        s2Label := CreateTheLabel(level=s2Level, colour=s2lineColour, style=label.style_none, labelText='S2')  // (" + tostring(s2Level) + ")")
+        s2Label
+    if s3LineStyle != 'Hidden'
+        s3Line := CreateTheLine(s3Line, s3Level, s3lineWgt, s3lineColour, s3LineStyle)  //, "S3 (" + tostring(s3Level) + ")")
+        s3Label := CreateTheLabel(level=s3Level, colour=s3lineColour, style=label.style_none, labelText='S3')  // (" + tostring(s3Level) + ")")
+        s3Label
+    if s4LineStyle != 'Hidden'
+        s4Line := CreateTheLine(s4Line, s4Level, s4lineWgt, s4lineColour, s4LineStyle)  //, "s4 (" + tostring(s4Level) + ")")
+        s4Label := CreateTheLabel(level=s4Level, colour=s4lineColour, style=label.style_none, labelText='S4')  // (" + tostring(s4Level) + ")")
+        s4Label
+    if s5LineStyle != 'Hidden'
+        s5Line := CreateTheLine(s5Line, s5Level, s5lineWgt, s5lineColour, s5LineStyle)  //, "s5 (" + tostring(s5Level) + ")")
+        s5Label := CreateTheLabel(level=s5Level, colour=s5lineColour, style=label.style_none, labelText='S5')  // (" + tostring(s3Level) + ")")
+        s5Label
+    if r1MidLineStyle != 'Hidden'
+        r1MidLine := CreateTheLine(r1MidLine, r1MidLevel, r1MidlineWgt, r1MidlineColour, r1MidLineStyle)  //, "MID (" + tostring(r1MidLevel) + ")")
+        r1MidLabel := CreateTheLabel(level=r1MidLevel, colour=r1MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(r1MidLevel) + ")")
+        r1MidLabel
+    if r2MidLineStyle != 'Hidden'
+        r2MidLine := CreateTheLine(r2MidLine, r2MidLevel, r2MidlineWgt, r2MidlineColour, r2MidLineStyle)  //, "MID (" + tostring(r2MidLevel) + ")")
+        r2MidLabel := CreateTheLabel(level=r2MidLevel, colour=r2MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(r2MidLevel) + ")")
+        r2MidLabel
+    if r3MidLineStyle != 'Hidden'
+        r3MidLine := CreateTheLine(r3MidLine, r3MidLevel, r3MidlineWgt, r3MidlineColour, r3MidLineStyle)  //, "MID (" + tostring(r3MidLevel) + ")")
+        r3MidLabel := CreateTheLabel(level=r3MidLevel, colour=r3MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(r3MidLevel) + ")")
+        r3MidLabel
+    if r4MidLineStyle != 'Hidden'
+        r4MidLine := CreateTheLine(r4MidLine, r4MidLevel, r4MidlineWgt, r4MidlineColour, r4MidLineStyle)  //, "MID (" + tostring(r4MidLevel) + ")")
+        r4MidLabel := CreateTheLabel(level=r4MidLevel, colour=r4MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(r4MidLevel) + ")")
+        r4MidLabel
+    if r5MidLineStyle != 'Hidden'
+        r5MidLine := CreateTheLine(r5MidLine, r5MidLevel, r5MidlineWgt, r5MidlineColour, r5MidLineStyle)  //, "MID (" + tostring(r5MidLevel) + ")")
+        r5MidLabel := CreateTheLabel(level=r5MidLevel, colour=r5MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(r3MidLevel) + ")")
+        r5MidLabel
+    if s1MidLineStyle != 'Hidden'
+        s1MidLine := CreateTheLine(s1MidLine, s1MidLevel, s1MidlineWgt, s1MidlineColour, s1MidLineStyle)  //, "MID (" + tostring(s1MidLevel) + ")")
+        s1MidLabel := CreateTheLabel(level=s1MidLevel, colour=s1MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(s1MidLevel) + ")")
+        s1MidLabel
+    if s2MidLineStyle != 'Hidden'
+        s2MidLine := CreateTheLine(s2MidLine, s2MidLevel, s2MidlineWgt, s2MidlineColour, s2MidLineStyle)  //, "MID (" + tostring(s2MidLevel) + ")")
+        s2MidLabel := CreateTheLabel(level=s2MidLevel, colour=s2MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(s2MidLevel) + ")")
+        s2MidLabel
+    if s3MidLineStyle != 'Hidden'
+        s3MidLine := CreateTheLine(s3MidLine, s3MidLevel, s3MidlineWgt, s3MidlineColour, s3MidLineStyle)  //, "MID (" + tostring(s3MidLevel) + ")")
+        s3MidLabel := CreateTheLabel(level=s3MidLevel, colour=s3MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(s3MidLevel) + ")")
+        s3MidLabel
+    if s4MidLineStyle != 'Hidden'
+        s4MidLine := CreateTheLine(s4MidLine, s4MidLevel, s4MidlineWgt, s4MidlineColour, s4MidLineStyle)  //, "MID (" + tostring(s4MidLevel) + ")")
+        s4MidLabel := CreateTheLabel(level=s4MidLevel, colour=s4MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(s4MidLevel) + ")")
+        s4MidLabel
+    if s5MidLineStyle != 'Hidden'
+        s5MidLine := CreateTheLine(s5MidLine, s5MidLevel, s5MidlineWgt, s5MidlineColour, s5MidLineStyle)  //, "MID (" + tostring(s5MidLevel) + ")")
+        s5MidLabel := CreateTheLabel(level=s5MidLevel, colour=s5MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(s3MidLevel) + ")")
+        s5MidLabel
+
+if not na(pLine) and line.get_x2(pLine) != bar_index
+    line.set_x2(r1Line, bar_index)
+    line.set_x2(pLine, bar_index)
+    line.set_x2(s1Line, bar_index)
+    line.set_x2(s1MidLine, bar_index)
+    line.set_x2(r1MidLine, bar_index)
+    line.set_x2(r2Line, bar_index)
+    line.set_x2(r3Line, bar_index)
+    line.set_x2(r4Line, bar_index)
+    line.set_x2(r5Line, bar_index)
+    line.set_x2(s2Line, bar_index)
+    line.set_x2(s3Line, bar_index)
+    line.set_x2(s4Line, bar_index)
+    line.set_x2(s5Line, bar_index)
+    line.set_x2(r2MidLine, bar_index)
+    line.set_x2(r3MidLine, bar_index)
+    line.set_x2(r4MidLine, bar_index)
+    line.set_x2(r5MidLine, bar_index)
+    line.set_x2(s2MidLine, bar_index)
+    line.set_x2(s3MidLine, bar_index)
+    line.set_x2(s4MidLine, bar_index)
+    line.set_x2(s5MidLine, bar_index)
+    if lblsOnRight  // if labels should be displayed on right, move to the location of the last bar.
+        label.set_x(pLabel, bar_index)
+        label.set_x(r1Label, bar_index)
+        label.set_x(r2Label, bar_index)
+        label.set_x(r3Label, bar_index)
+        label.set_x(r4Label, bar_index)
+        label.set_x(r5Label, bar_index)
+        label.set_x(r1MidLabel, bar_index)
+        label.set_x(r2MidLabel, bar_index)
+        label.set_x(r3MidLabel, bar_index)
+        label.set_x(r4MidLabel, bar_index)
+        label.set_x(r5MidLabel, bar_index)
+        label.set_x(s1Label, bar_index)
+        label.set_x(s2Label, bar_index)
+        label.set_x(s3Label, bar_index)
+        label.set_x(s4Label, bar_index)
+        label.set_x(s5Label, bar_index)
+        label.set_x(s1MidLabel, bar_index)
+        label.set_x(s2MidLabel, bar_index)
+        label.set_x(s3MidLabel, bar_index)
+        label.set_x(s4MidLabel, bar_index)
+        label.set_x(s5MidLabel, bar_index)
+//PIVOT Indicator for Highter Code Starts Here
+//PIVOT Indicator Code Starts Here
+
+CreateLineStyleHT(styleText) =>
+    lineStyleHT = styleText == 'dotted (┈)' ? line.style_dotted : styleText == 'dashed (╌)' ? line.style_dashed : styleText == 'Hidden' ? 'Hidden' : line.style_solid
+    lineStyleHT
+
+lblsOnRightHT = input(title='Display labels on right', defval=false)
+showPriceHT = input(title='Show price (if not shown, hover over label to view price)', defval=true)
+
+pLineStyleHT = CreateLineStyleHT(input.string(title='HT P', inline='pLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+plineColourHT = input.color(title='', defval=color.green, inline='pLine')
+plineWgtHT = input.int(title='', defval=1, minval=1, inline='pLine')
+
+r1LineStyleHT = CreateLineStyleHT(input.string(title='HT R1', inline='r1Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r1lineColourHT = input.color(title='', defval=color.green, inline='r1Line')
+r1lineWgtHT = input.int(title='', defval=1, minval=1, inline='r1Line')
+
+r2LineStyleHT = CreateLineStyleHT(input.string(title='HT R2', inline='r2Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r2lineColourHT = input.color(title='', defval=color.green, inline='r2Line')
+r2lineWgtHT = input.int(title='', defval=1, minval=1, inline='r2Line')
+
+r3LineStyleHT = CreateLineStyleHT(input.string(title='HT R3', inline='r3Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r3lineColourHT = input.color(title='', defval=color.green, inline='r3Line')
+r3lineWgtHT = input.int(title='', defval=1, minval=1, inline='r3Line')
+
+r4LineStyleHT = CreateLineStyleHT(input.string(title='HT R5', inline='r4Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r4lineColourHT = input.color(title='', defval=color.green, inline='r4Line')
+r4lineWgtHT = input.int(title='', defval=1, minval=1, inline='r4Line')
+
+r5LineStyleHT = CreateLineStyleHT(input.string(title='HT R4', inline='r5Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r5lineColourHT = input.color(title='', defval=color.green, inline='r5Line')
+r5lineWgtHT = input.int(title='', defval=1, minval=1, inline='r5Line')
+
+s1LineStyleHT = CreateLineStyleHT(input.string(title='HT S1', inline='s1Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s1lineColourHT = input.color(title='', defval=color.green, inline='s1Line')
+s1lineWgtHT = input.int(title='', defval=1, minval=1, inline='s1Line')
+
+s2LineStyleHT = CreateLineStyleHT(input.string(title='HT S2', inline='s2Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s2lineColourHT = input.color(title='', defval=color.green, inline='s2Line')
+s2lineWgtHT = input.int(title='', defval=1, minval=1, inline='s2Line')
+
+s3LineStyleHT = CreateLineStyleHT(input.string(title='HT S3', inline='s3Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s3lineColourHT = input.color(title='', defval=color.green, inline='s3Line')
+s3lineWgtHT = input.int(title='', defval=1, minval=1, inline='s3Line')
+
+s4LineStyleHT = CreateLineStyleHT(input.string(title='HT S4', inline='s4Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s4lineColourHT = input.color(title='', defval=color.green, inline='s4Line')
+s4lineWgtHT = input.int(title='', defval=1, minval=1, inline='s4Line')
+
+s5LineStyleHT = CreateLineStyleHT(input.string(title='HT S5', inline='s5Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s5lineColourHT = input.color(title='', defval=color.green, inline='s5Line')
+s5lineWgtHT = input.int(title='', defval=1, minval=1, inline='s5Line')
+
+r1MidLineStyleHT = CreateLineStyleHT(input.string(title='HT R1 Mid', inline='r1MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r1MidlineColourHT = input.color(title='', defval=color.green, inline='r1MidLine')
+r1MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='r1MidLine')
+
+r2MidLineStyleHT = CreateLineStyleHT(input.string(title='HT R2 Mid', inline='r2MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r2MidlineColourHT = input.color(title='', defval=color.green, inline='r2MidLine')
+r2MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='r2MidLine')
+
+r3MidLineStyleHT = CreateLineStyleHT(input.string(title='HT R3 Mid', inline='r3MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r3MidlineColourHT = input.color(title='', defval=color.green, inline='r3MidLine')
+r3MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='r3MidLine')
+
+r4MidLineStyleHT = CreateLineStyleHT(input.string(title='HT R4 Mid', inline='r4MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r4MidlineColourHT = input.color(title='', defval=color.green, inline='r4MidLine')
+r4MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='r4MidLine')
+
+r5MidLineStyleHT = CreateLineStyleHT(input.string(title='HT R5 Mid', inline='r5MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r5MidlineColourHT = input.color(title='', defval=color.green, inline='r5MidLine')
+r5MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='r5MidLine')
+
+s1MidLineStyleHT = CreateLineStyleHT(input.string(title='HT S1 Mid', inline='s1MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s1MidlineColourHT = input.color(title='', defval=color.green, inline='s1MidLine')
+s1MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='s1MidLine')
+
+s2MidLineStyleHT = CreateLineStyleHT(input.string(title='HT S2 Mid', inline='s2MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s2MidlineColourHT = input.color(title='', defval=color.green, inline='s2MidLine')
+s2MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='s2MidLine')
+
+s3MidLineStyleHT = CreateLineStyleHT(input.string(title='HT S3 Mid', inline='s3MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s3MidlineColourHT = input.color(title='', defval=color.green, inline='s3MidLine')
+s3MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='s3MidLine')
+
+s4MidLineStyleHT = CreateLineStyleHT(input.string(title='HT S4 Mid', inline='s4MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s4MidlineColourHT = input.color(title='', defval=color.green, inline='s4MidLine')
+s4MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='s4MidLine')
+
+s5MidLineStyleHT = CreateLineStyleHT(input.string(title='HT S5 Mid', inline='s5MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s5MidlineColourHT = input.color(title='', defval=color.green, inline='s5MidLine')
+s5MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='s5MidLine')
+
+//lineColour = input(title="P,S,R Colour", type=input.color, defval=color.blue)
+//midlineColour = input(title="Mid Line Colour", type=input.color, defval=color.blue)
+// function to create the line and set the options, label etc.
+// inputs:
+// lineToSet - a reference to the line object to work with
+// level - the price level (y axis) at which to draw the horizontal line
+// width - a number used to set the thickness of the line 
+// colour - the colour of the line - use color.<colour> to set this
+// style - the style of the eg line.style_dotted, line.style_solid etc
+// Returns the line that was created
+CreateTheLineHT(lineToSetHT, levelHT, widthHT, colourHT, styleHT) =>  //, labelText)=>
+    // create the line
+    line.set_x2(lineToSetHT, bar_index)
+    line.set_extend(lineToSetHT, extend.none)
+    // return the line
+    line.new(x1=bar_index, y1=levelHT, x2=bar_index, y2=levelHT, width=widthHT, extend=extend.right, color=colourHT, style=styleHT)
+    //lineToSet 
+
+CreateTheLabelHT(levelHT, colourHT, styleHT, labelTextHT) =>
+    // create the label
+    lblTextHT = labelTextHT
+    tooltipHT = labelTextHT + ' (' + str.tostring(levelHT) + ')'
+
+    if showPriceHT
+        lblTextHT := tooltipHT  // include the price in the label
+        lblTextHT
+
+    label.new(bar_index, levelHT, lblTextHT, style=label.style_none, textcolor=colourHT, textalign=text.align_right, tooltip=tooltipHT)
+
+// TF = timeframe
+higherTFHT = (timeframe.isintraday and timeframe.multiplier < 30) ? input.timeframe("D", "Resolution", options=['D','W','M'])  : na
+// get the high, low, open, close of the higher (1 day) timeframe
+prevCloseHTFHT = request.security(syminfo.tickerid, higherTFHT, close[1], lookahead=barmerge.lookahead_on)
+prevOpenHTFHT = request.security(syminfo.tickerid, higherTFHT, open[1], lookahead=barmerge.lookahead_on)
+prevHighHTFHT = request.security(syminfo.tickerid, higherTFHT, high[1], lookahead=barmerge.lookahead_on)
+prevLowHTFHT = request.security(syminfo.tickerid, higherTFHT, low[1], lookahead=barmerge.lookahead_on)
+// pivot level
+pLevelHT = math.round_to_mintick((prevHighHTFHT + prevLowHTFHT + prevCloseHTFHT) / 3)
+r1LevelHT = math.round_to_mintick(pLevelHT * 2 - prevLowHTFHT)
+s1LevelHT = math.round_to_mintick(pLevelHT * 2 - prevHighHTFHT)
+r1MidLevelHT = math.round_to_mintick((pLevelHT + r1LevelHT) / 2)
+s1MidLevelHT = math.round_to_mintick((pLevelHT + s1LevelHT) / 2)
+// calc the range = prev day high - prev day Low
+range_1HT = math.round_to_mintick(prevHighHTFHT - prevLowHTFHT)
+// levels for the additional Resistance/support levels - calculated as (plevel +/- range*N) where N = Support Level -1
+r2LevelHT = pLevelHT + range_1HT
+s2LevelHT = pLevelHT - range_1HT
+r2MidLevelHT = math.round_to_mintick((r2LevelHT + r1LevelHT) / 2)
+s2MidLevelHT = math.round_to_mintick((s2LevelHT + s1LevelHT) / 2)
+r3LevelHT = math.round_to_mintick(r1LevelHT + range_1HT)
+s3LevelHT = math.round_to_mintick(s1LevelHT - range_1HT)
+r3MidLevelHT = math.round_to_mintick((r3LevelHT + r2LevelHT) / 2)
+s3MidLevelHT = math.round_to_mintick((s3LevelHT + s2LevelHT) / 2)
+r4LevelHT = math.round_to_mintick(r2LevelHT + range_1HT)
+s4LevelHT = math.round_to_mintick(s2LevelHT - range_1HT)
+r4MidLevelHT = math.round_to_mintick((r4LevelHT + r3LevelHT) / 2)
+s4MidLevelHT = math.round_to_mintick((s4LevelHT + s3LevelHT) / 2)
+r5LevelHT = math.round_to_mintick(r3LevelHT + range_1HT)
+s5LevelHT = math.round_to_mintick(s3LevelHT - range_1HT)
+r5MidLevelHT = math.round_to_mintick((r5LevelHT + r4LevelHT) / 2)
+s5MidLevelHT = math.round_to_mintick((s5LevelHT + s4LevelHT) / 2)
+var line pLineHT = na
+var line r1LineHT = na
+var line r2LineHT = na
+var line r3LineHT = na
+var line r4LineHT = na
+var line r5LineHT = na
+var line s1LineHT = na
+var line s2LineHT = na
+var line s3LineHT = na
+var line s4LineHT = na
+var line s5LineHT = na
+var line r1MidLineHT = na
+var line r2MidLineHT = na
+var line r3MidLineHT = na
+var line r4MidLineHT = na
+var line r5MidLineHT = na
+var line s1MidLineHT = na
+var line s2MidLineHT = na
+var line s3MidLineHT = na
+var line s4MidLineHT = na
+var line s5MidLineHT = na
+var label pLabelHT = na
+var label r1LabelHT = na
+var label r2LabelHT = na
+var label r3LabelHT = na
+var label r4LabelHT = na
+var label r5LabelHT = na
+var label r1MidLabelHT = na
+var label r2MidLabelHT = na
+var label r3MidLabelHT = na
+var label r4MidLabelHT = na
+var label r5MidLabelHT = na
+var label s1LabelHT = na
+var label s2LabelHT = na
+var label s3LabelHT = na
+var label s4LabelHT = na
+var label s5LabelHT = na
+var label s1MidLabelHT = na
+var label s2MidLabelHT = na
+var label s3MidLabelHT = na
+var label s4MidLabelHT = na
+var label s5MidLabelHT = na
+if pLevelHT[1] != pLevelHT
+    if pLineStyleHT != 'Hidden'
+        pLineHT := CreateTheLineHT(pLineHT, pLevelHT, plineWgtHT, plineColourHT, pLineStyleHT)  //, "P (" + tostring(pLevel) + ")")
+        pLabelHT := CreateTheLabelHT(levelHT=pLevelHT, colourHT=plineColourHT, styleHT=label.style_none, labelTextHT='P')  // (" + tostring(pLevel) + ")")
+        pLabelHT
+        //pLabel := label.new(bar_index, pLevel, "PTest", style=label.style_none)
+    if r1LineStyleHT != 'Hidden'
+        r1LineHT := CreateTheLineHT(r1LineHT, r1LevelHT, r1lineWgtHT, r1lineColourHT, r1LineStyleHT)  //, "R1 (" + tostring(r1Level) + ")")
+        r1LabelHT := CreateTheLabelHT(levelHT=r1LevelHT, colourHT=r1lineColourHT, styleHT=label.style_none, labelTextHT='R1')  // (" + tostring(r1Level) + ")")
+        r1LabelHT
+    if r2LineStyleHT != 'Hidden'
+        r2LineHT := CreateTheLineHT(r2LineHT, r2LevelHT, r2lineWgtHT, r2lineColourHT, r2LineStyleHT)  //, "R2 (" + tostring(r2Level) + ")")
+        r2LabelHT := CreateTheLabelHT(levelHT=r2LevelHT, colourHT=r2lineColourHT, styleHT=label.style_none, labelTextHT='R2')  // (" + tostring(r2Level) + ")")
+        r2LabelHT
+    if r3LineStyleHT != 'Hidden'
+        r3LineHT := CreateTheLineHT(r3LineHT, r3LevelHT, r3lineWgtHT, r3lineColourHT, r3LineStyleHT)  //, "R3 (" + tostring(r3Level) + ")")
+        r3LabelHT := CreateTheLabelHT(levelHT=r3LevelHT, colourHT=r3lineColourHT, styleHT=label.style_none, labelTextHT='R3')  // (" + tostring(r3Level) + ")")
+        r3LabelHT
+    if r4LineStyleHT != 'Hidden'
+        r4LineHT := CreateTheLineHT(r4LineHT, r4LevelHT, r4lineWgtHT, r4lineColourHT, r4LineStyleHT)  //, "r4 (" + tostring(r4Level) + ")")
+        r4LabelHT := CreateTheLabelHT(levelHT=r4LevelHT, colourHT=r4lineColourHT, styleHT=label.style_none, labelTextHT='R4')  // (" + tostring(r5Level) + ")")
+        r4LabelHT
+    if r5LineStyleHT != 'Hidden'
+        r5LineHT := CreateTheLineHT(r5LineHT, r5LevelHT, r5lineWgtHT, r5lineColourHT, r5LineStyleHT)  //, "r5 (" + tostring(r5Level) + ")")
+        r5LabelHT := CreateTheLabelHT(levelHT=r5LevelHT, colourHT=r5lineColourHT, styleHT=label.style_none, labelTextHT='R5')  // (" + tostring(r5Level) + ")")
+        r5LabelHT
+    if s1LineStyleHT != 'Hidden'
+        s1LineHT := CreateTheLineHT(s1LineHT, s1LevelHT, s1lineWgtHT, s1lineColourHT, s1LineStyleHT)  //, "S1 (" + tostring(s1Level) + ")")
+        s1LabelHT := CreateTheLabelHT(levelHT=s1LevelHT, colourHT=s1lineColourHT, styleHT=label.style_none, labelTextHT='S1')  // (" + tostring(s1Level) + ")")
+        s1LabelHT
+    if s2LineStyleHT != 'Hidden'
+        s2LineHT := CreateTheLineHT(s2LineHT, s2LevelHT, s2lineWgtHT, s2lineColourHT, s2LineStyleHT)  //, "S2 (" + tostring(s2Level) + ")")
+        s2LabelHT := CreateTheLabelHT(levelHT=s2LevelHT, colourHT=s2lineColourHT, styleHT=label.style_none, labelTextHT='S2')  // (" + tostring(s2Level) + ")")
+        s2LabelHT
+    if s3LineStyleHT != 'Hidden'
+        s3LineHT := CreateTheLineHT(s3LineHT, s3LevelHT, s3lineWgtHT, s3lineColourHT, s3LineStyleHT)  //, "S3 (" + tostring(s3Level) + ")")
+        s3LabelHT := CreateTheLabelHT(levelHT=s3LevelHT, colourHT=s3lineColourHT, styleHT=label.style_none, labelTextHT='S3')  // (" + tostring(s3Level) + ")")
+        s3LabelHT
+    if s4LineStyleHT != 'Hidden'
+        s4LineHT := CreateTheLineHT(s4LineHT, s4LevelHT, s4lineWgtHT, s4lineColourHT, s4LineStyleHT)  //, "s4 (" + tostring(s4Level) + ")")
+        s4LabelHT := CreateTheLabelHT(levelHT=s4LevelHT, colourHT=s4lineColourHT, styleHT=label.style_none, labelTextHT='S4')  // (" + tostring(s4Level) + ")")
+        s4LabelHT
+    if s5LineStyleHT != 'Hidden'
+        s5LineHT := CreateTheLineHT(s5LineHT, s5LevelHT, s5lineWgtHT, s5lineColourHT, s5LineStyleHT)  //, "s5 (" + tostring(s5Level) + ")")
+        s5LabelHT := CreateTheLabelHT(levelHT=s5LevelHT, colourHT=s5lineColourHT, styleHT=label.style_none, labelTextHT='S5')  // (" + tostring(s3Level) + ")")
+        s5LabelHT
+    if r1MidLineStyleHT != 'Hidden'
+        r1MidLineHT := CreateTheLineHT(r1MidLineHT, r1MidLevelHT, r1MidlineWgtHT, r1MidlineColourHT, r1MidLineStyleHT)  //, "MID (" + tostring(r1MidLevel) + ")")
+        r1MidLabelHT := CreateTheLabelHT(levelHT=r1MidLevelHT, colourHT=r1MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(r1MidLevel) + ")")
+        r1MidLabelHT
+    if r2MidLineStyleHT != 'Hidden'
+        r2MidLineHT := CreateTheLineHT(r2MidLineHT, r2MidLevelHT, r2MidlineWgtHT, r2MidlineColourHT, r2MidLineStyleHT)  //, "MID (" + tostring(r2MidLevel) + ")")
+        r2MidLabelHT := CreateTheLabelHT(levelHT=r2MidLevelHT, colourHT=r2MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(r2MidLevel) + ")")
+        r2MidLabelHT
+    if r3MidLineStyleHT != 'Hidden'
+        r3MidLineHT := CreateTheLineHT(r3MidLineHT, r3MidLevelHT, r3MidlineWgtHT, r3MidlineColourHT, r3MidLineStyleHT)  //, "MID (" + tostring(r3MidLevel) + ")")
+        r3MidLabelHT := CreateTheLabelHT(levelHT=r3MidLevelHT, colourHT=r3MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(r3MidLevel) + ")")
+        r3MidLabelHT
+    if r4MidLineStyleHT != 'Hidden'
+        r4MidLineHT := CreateTheLineHT(r4MidLineHT, r4MidLevelHT, r4MidlineWgtHT, r4MidlineColourHT, r4MidLineStyleHT)  //, "MID (" + tostring(r4MidLevel) + ")")
+        r4MidLabelHT := CreateTheLabelHT(levelHT=r4MidLevelHT, colourHT=r4MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(r4MidLevel) + ")")
+        r4MidLabelHT
+    if r5MidLineStyleHT != 'Hidden'
+        r5MidLineHT := CreateTheLineHT(r5MidLineHT, r5MidLevelHT, r5MidlineWgtHT, r5MidlineColourHT, r5MidLineStyleHT)  //, "MID (" + tostring(r5MidLevel) + ")")
+        r5MidLabelHT := CreateTheLabelHT(levelHT=r5MidLevelHT, colourHT=r5MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(r3MidLevel) + ")")
+        r5MidLabelHT
+    if s1MidLineStyleHT != 'Hidden'
+        s1MidLineHT := CreateTheLineHT(s1MidLineHT, s1MidLevelHT, s1MidlineWgtHT, s1MidlineColourHT, s1MidLineStyleHT)  //, "MID (" + tostring(s1MidLevel) + ")")
+        s1MidLabelHT := CreateTheLabelHT(levelHT=s1MidLevelHT, colourHT=s1MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(s1MidLevel) + ")")
+        s1MidLabelHT
+    if s2MidLineStyleHT != 'Hidden'
+        s2MidLineHT := CreateTheLineHT(s2MidLineHT, s2MidLevelHT, s2MidlineWgtHT, s2MidlineColourHT, s2MidLineStyleHT)  //, "MID (" + tostring(s2MidLevel) + ")")
+        s2MidLabelHT := CreateTheLabelHT(levelHT=s2MidLevelHT, colourHT=s2MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(s2MidLevel) + ")")
+        s2MidLabelHT
+    if s3MidLineStyleHT != 'Hidden'
+        s3MidLineHT := CreateTheLineHT(s3MidLineHT, s3MidLevelHT, s3MidlineWgtHT, s3MidlineColourHT, s3MidLineStyleHT)  //, "MID (" + tostring(s3MidLevel) + ")")
+        s3MidLabelHT := CreateTheLabelHT(levelHT=s3MidLevelHT, colourHT=s3MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(s3MidLevel) + ")")
+        s3MidLabelHT
+    if s4MidLineStyleHT != 'Hidden'
+        s4MidLineHT := CreateTheLineHT(s4MidLineHT, s4MidLevelHT, s4MidlineWgtHT, s4MidlineColourHT, s4MidLineStyleHT)  //, "MID (" + tostring(s4MidLevel) + ")")
+        s4MidLabelHT := CreateTheLabelHT(levelHT=s4MidLevelHT, colourHT=s4MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(s4MidLevel) + ")")
+        s4MidLabelHT
+    if s5MidLineStyleHT != 'Hidden'
+        s5MidLineHT := CreateTheLineHT(s5MidLineHT, s5MidLevelHT, s5MidlineWgtHT, s5MidlineColourHT, s5MidLineStyleHT)  //, "MID (" + tostring(s5MidLevel) + ")")
+        s5MidLabelHT := CreateTheLabelHT(levelHT=s5MidLevelHT, colourHT=s5MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(s3MidLevel) + ")")
+        s5MidLabelHT
+
+if not na(pLineHT) and line.get_x2(pLineHT) != bar_index
+    line.set_x2(r1LineHT, bar_index)
+    line.set_x2(pLineHT, bar_index)
+    line.set_x2(s1LineHT, bar_index)
+    line.set_x2(s1MidLineHT, bar_index)
+    line.set_x2(r1MidLineHT, bar_index)
+    line.set_x2(r2LineHT, bar_index)
+    line.set_x2(r3LineHT, bar_index)
+    line.set_x2(r4LineHT, bar_index)
+    line.set_x2(r5LineHT, bar_index)
+    line.set_x2(s2LineHT, bar_index)
+    line.set_x2(s3LineHT, bar_index)
+    line.set_x2(s4LineHT, bar_index)
+    line.set_x2(s5LineHT, bar_index)
+    line.set_x2(r2MidLineHT, bar_index)
+    line.set_x2(r3MidLineHT, bar_index)
+    line.set_x2(r4MidLineHT, bar_index)
+    line.set_x2(r5MidLineHT, bar_index)
+    line.set_x2(s2MidLineHT, bar_index)
+    line.set_x2(s3MidLineHT, bar_index)
+    line.set_x2(s4MidLineHT, bar_index)
+    line.set_x2(s5MidLineHT, bar_index)
+    if lblsOnRightHT  // if labels should be displayed on right, move to the location of the last bar.
+        label.set_x(pLabelHT, bar_index)
+        label.set_x(r1LabelHT, bar_index)
+        label.set_x(r2LabelHT, bar_index)
+        label.set_x(r3LabelHT, bar_index)
+        label.set_x(r4LabelHT, bar_index)
+        label.set_x(r5LabelHT, bar_index)
+        label.set_x(r1MidLabelHT, bar_index)
+        label.set_x(r2MidLabelHT, bar_index)
+        label.set_x(r3MidLabelHT, bar_index)
+        label.set_x(r4MidLabelHT, bar_index)
+        label.set_x(r5MidLabelHT, bar_index)
+        label.set_x(s1LabelHT, bar_index)
+        label.set_x(s2LabelHT, bar_index)
+        label.set_x(s3LabelHT, bar_index)
+        label.set_x(s4LabelHT, bar_index)
+        label.set_x(s5LabelHT, bar_index)
+        label.set_x(s1MidLabelHT, bar_index)
+        label.set_x(s2MidLabelHT, bar_index)
+        label.set_x(s3MidLabelHT, bar_index)
+        label.set_x(s4MidLabelHT, bar_index)
+        label.set_x(s5MidLabelHT, bar_index)
+
+// Get user input
+//rsiSource = input(title='RSI Source', defval=close)
+//rsiLength = input(title='RSI Length', defval=14)
+//rsiOverbought = input(title='RSI Overbought Level', defval=60)
+//rsiOversold = input(title='RSI Oversold Level', defval=40)
+ttmLow = input(title='TTM Low', defval=-1)
+ttmHigh = input(title='TTM High', defval=1)
+// Get RSI Value
+//rsiValue = ta.rsi(rsiSource, rsiLength)
+//isRsiOB = rsiValue >= rsiOverbought
+//isRsiOS = rsiValue <= rsiOversold
+// TTM SQUEEZE
+length = input.int(title='TTM Length', defval=20, minval=0)
+bband(length, mult) =>
+    ta.sma(close, length) + mult * ta.stdev(close, length)
+keltner(length, mult) =>
+    ta.ema(close, length) + mult * ta.ema(ta.tr, length)
+
+e1 = (ta.highest(high, length) + ta.lowest(low, length)) / 2 + ta.sma(close, length)
+osc = ta.linreg(close - e1 / 2, length, 0)
+diff = bband(length, 2) - keltner(length, 1)
+ttmL = osc < ttmLow and rsiValue <= rsiOversold
+ttmH = osc > ttmHigh and rsiValue >= rsiOverbought
+// Plot signals to chart
+
+plotshape(ttmH, title='Overbought', location=location.abovebar, color=color.new(color.red, 0), style=shape.arrowdown, size=size.auto)
+plotshape(ttmL, title='Oversold', location=location.belowbar, color=color.new(color.green, 0), style=shape.arrowup, size=size.auto)
+
+
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Beardy_Fred
+
+//@version=5
+indicator(title="10X Bars", shorttitle="10X", overlay = true)
+
+//INPUTS
+len         = input.int(14, "Directional Length")
+ADX_T       = input.int(20, "ADX Length")
+vol_len     = input.int(20, "Volume Length")
+vol_trigger = input.int(50, "Volume % Above Average Trigger", minval=5)
+
+//DMI CALCULATIONS - Tradingview Built-In DMI Indicator
+up          = ta.change(high)
+down        = -ta.change(low)
+plusDM      = na(up) ? na : (up > down and up > 0 ? up : 0)
+minusDM     = na(down) ? na : (down > up and down > 0 ? down : 0)
+trur        = ta.rma(ta.tr, len)
+plus        = fixnan(100 * ta.rma(plusDM, len) / trur)
+minus       = fixnan(100 * ta.rma(minusDM, len) / trur)
+sum         = plus + minus
+adx         = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), len)
+
+//10X CALCULATIONS
+D_Up        = (plus > minus) and (adx > ADX_T)
+D_Down      = (minus > plus) and (adx > ADX_T)
+sideways    = (adx < ADX_T)
+Bar_Color   = sideways ? color.new(color.yellow, 0) : D_Up ? color.new(color.green, 0) : D_Down ? color.new(color.red, 0) :  na
+
+//PLOT
+barcolor(color=Bar_Color)
+
+//SPIKES ABOVE AVERAGE VOLUME
+Avg_Vol     = ta.sma(volume, vol_len)
+Vol_Spike   = (1 + (vol_trigger / 100)) * Avg_Vol
+plotchar(volume > Vol_Spike, "Volume Spike", char = '◉', location = location.bottom, color = color.new(color.aqua, 0), size = size.tiny)
+
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Beardy_Fred
+
+//@version=5
+indicator(title="10X Market", overlay = false)
+
+//LENGTH INPUTS
+len = input(14, "Directional Length")
+ADX_T = input(20, "ADX Length")
+vol_len = input(20, "Volume Length")
+
+//TICKER INPUTS
+Ticker1= input.symbol(title="Symbol_1", defval="CME_MINI:ES1!")
+Ticker2= input.symbol(title="Symbol_2", defval="CME_MINI:NQ1!")
+Ticker3= input.symbol(title="Symbol_3", defval="AMEX:SPY")
+Ticker4= input.symbol(title="Symbol_4", defval="NASDAQ:QQQ")
+Ticker5= input.symbol(title="Symbol_5", defval="AMEX:IWM")
+Ticker6= input.symbol(title="Symbol_6", defval="AMEX:XLC")
+Ticker7= input.symbol(title="Symbol_7", defval="AMEX:XLY")
+Ticker8= input.symbol(title="Symbol_8", defval="AMEX:XLP")
+Ticker9= input.symbol(title="Symbol_9", defval="AMEX:XLE")
+Ticker10= input.symbol(title="Symbol_10", defval="AMEX:XLF")
+Ticker11= input.symbol(title="Symbol_11", defval="AMEX:XLV")
+Ticker12= input.symbol(title="Symbol_12", defval="AMEX:XLI")
+Ticker13= input.symbol(title="Symbol_13", defval="AMEX:XLB")
+Ticker14= input.symbol(title="Symbol_14", defval="AMEX:XLRE")
+Ticker15= input.symbol(title="Symbol_15", defval="AMEX:XLK")
+Ticker16= input.symbol(title="Symbol_16", defval="AMEX:XLU")
+
+// DMI CALCULATIONS
+up = ta.change(high)
+down = -ta.change(low)
+plusDM = na(up) ? na : (up > down and up > 0 ? up : 0)
+minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+trur = ta.rma(ta.tr, len)
+plus = fixnan(100 * ta.rma(plusDM, len) / trur)
+minus = fixnan(100 * ta.rma(minusDM, len) / trur)
+sum = plus + minus
+adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), len)
+
+//10X CALCULATIONS
+D_Up = (plus > minus) and (adx > ADX_T)
+D_Down = (minus > plus) and (adx > ADX_T)
+uptrend = D_Up 
+downtrend = D_Down
+sideways = (adx < ADX_T)
+Bar_Color = sideways ? color.yellow : uptrend ? color.green : downtrend ? color.red :  na
+
+[SC_1] = request.security(Ticker1, timeframe.period, [Bar_Color])
+[SC_2] = request.security(Ticker2, timeframe.period, [Bar_Color])
+[SC_3] = request.security(Ticker3, timeframe.period, [Bar_Color])
+[SC_4] = request.security(Ticker4, timeframe.period, [Bar_Color])
+[SC_5] = request.security(Ticker5, timeframe.period, [Bar_Color])
+[SC_6] = request.security(Ticker6, timeframe.period, [Bar_Color])
+[SC_7] = request.security(Ticker7, timeframe.period, [Bar_Color])
+[SC_8] = request.security(Ticker8, timeframe.period, [Bar_Color])
+[SC_9] = request.security(Ticker9, timeframe.period, [Bar_Color])
+[SC_10] = request.security(Ticker10, timeframe.period, [Bar_Color])
+[SC_11] = request.security(Ticker11, timeframe.period, [Bar_Color])
+[SC_12] = request.security(Ticker12, timeframe.period, [Bar_Color])
+[SC_13] = request.security(Ticker13, timeframe.period, [Bar_Color])
+[SC_14] = request.security(Ticker14, timeframe.period, [Bar_Color])
+[SC_15] = request.security(Ticker15, timeframe.period, [Bar_Color])
+[SC_16] = request.security(Ticker16, timeframe.period, [Bar_Color])
+
+// PLOTS //
+l_width = 2
+shape = plot.style_circles
+
+hline(19, color=color.gray, linestyle = hline.style_dotted)
+plot(18, color=SC_1, style=shape, linewidth=l_width)
+plot(17, color=SC_2, style=shape, linewidth=l_width)
+hline(16, color=color.gray, linestyle = hline.style_dotted)
+plot(15, color=SC_3, style=shape, linewidth=l_width)
+plot(14, color=SC_4, style=shape, linewidth=l_width)
+plot(13, color=SC_5, style=shape, linewidth=l_width)
+hline(12, color=color.gray, linestyle = hline.style_dotted)
+plot(11, color=SC_6, style=shape, linewidth=l_width)
+plot(10, color=SC_7, style=shape, linewidth=l_width)
+plot(9, color=SC_8, style=shape, linewidth=l_width)
+plot(8, color=SC_9, style=shape, linewidth=l_width)
+plot(7, color=SC_10, style=shape, linewidth=l_width)
+plot(6, color=SC_11, style=shape, linewidth=l_width)
+plot(5, color=SC_12, style=shape, linewidth=l_width)
+plot(4, color=SC_13, style=shape, linewidth=l_width)
+plot(3, color=SC_14, style=shape, linewidth=l_width)
+plot(2, color=SC_15, style=shape, linewidth=l_width)
+plot(1, color=SC_16, style=shape, linewidth=l_width)
+hline(0, color=color.gray, linestyle = hline.style_dotted)
+
+//TICKER LABELS//
+Tick_Style = label.style_none
+Tick_Color = color.new(color.white, 0)
+Tick_Size = size.small
+Tick_Pos = bar_index + 2 // distance label is from 1st dot
+
+getName(_str) =>
+    string[] _pair = str.split(_str, ":")
+    string[] _chars = str.split(array.get(_pair, 1), "")
+    int _len = array.size(_chars) - 0
+    string[] _substr = array.new_string(0)
+    _substr := array.slice(_chars, 0, _len)
+    string _return = array.join(_substr, "")
+
+L1= label.new(Tick_Pos, 17.75, text=getName(Ticker1), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L1[1])
+L2= label.new(Tick_Pos, 16.75, text=getName(Ticker2), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L2[1])
+L3= label.new(Tick_Pos, 14.75, text=getName(Ticker3), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L3[1])
+L4= label.new(Tick_Pos, 13.75, text=getName(Ticker4), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L4[1])
+L5= label.new(Tick_Pos, 12.75, text=getName(Ticker5), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L5[1])
+L6= label.new(Tick_Pos, 10.75, text=getName(Ticker6), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L6[1])
+L7= label.new(Tick_Pos, 9.75, text=getName(Ticker7), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L7[1])
+L8= label.new(Tick_Pos, 8.75, text=getName(Ticker8), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L8[1])
+L9= label.new(Tick_Pos, 7.75, text=getName(Ticker9), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L9[1])
+L10= label.new(Tick_Pos, 6.75, text=getName(Ticker10), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L10[1])
+L11= label.new(Tick_Pos, 5.75, text=getName(Ticker11), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L11[1])
+L12= label.new(Tick_Pos, 4.75, text=getName(Ticker12), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L12[1])
+L13= label.new(Tick_Pos, 3.75, text=getName(Ticker13), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L13[1])
+L14= label.new(Tick_Pos, 2.75, text=getName(Ticker14), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L14[1])
+L15= label.new(Tick_Pos, 1.75, text=getName(Ticker15), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L15[1])
+L16= label.new(Tick_Pos, 0.75, text=getName(Ticker16), style=Tick_Style, textcolor=Tick_Color, size=Tick_Size)
+label.delete(L16[1])
+
+
+
+//This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+//© MattDeLong
+
+//@version=4
+study("13ema BSOS", overlay=true)
+ema13 = security(syminfo.tickerid, '1D', ema(close, 13))
+ema34 = security(syminfo.tickerid, '1D', ema(close, 34))
+plot(ema13, linewidth=2, color=color.rgb(92, 91, 84), editable=true)
+plot(ema34, linewidth=2, color=color.aqua, editable=true)
+
+//breakAbove = (close > ema13 and close[1] <= ema13[1]) ? 1 : 0
+//breakBelow = (close < ema13 and close[1] >= ema13[1]) ? 1 : 0
+//plotshape((breakBelow[1] or breakBelow[2]) and breakAbove, style=shape.triangleup, location=location.belowbar, color=color.teal, size=size.small)
+plotshape(close[1] < ema13[1] and close > ema13 and close > ema34 and ema13>ema34, style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small)
+
+
+
+
+//This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+//© MattDeLong
+
+//@version=4
+study("50ema + 105ema", overlay=true)
+ema105 = security(syminfo.tickerid, '30', ema(close, 105))
+ema50 = security(syminfo.tickerid, '30', ema(close, 50))
+
+aa = plot(timeframe.isintraday ? ema50 : na, linewidth=1, color=color.teal, editable=true)
+bb = plot(timeframe.isintraday ? ema105 : na,linewidth=2, color=color.teal, editable=true)
+fill(aa, bb, color=color.gray)
+
+body = abs(open-close)
+us = open < close ? high-close : high-open
+ls = open < close ? open-low : close-low
+
+// data = (us < body*0.1 and ls>body*2)
+hammer = us < body * 0.2 and ls > body * 2
+//inverted_hammer = ls < body*0.2 and us>body*2/plotshape(hammer, style=shape.cross, location=location.belowbar, color=color.green, size=size.small)
+
+
+// === ALERT === 
+//alertcondition(hammer, title="Hammer Buy", message="Hammer: Play break higher")
+
+
+
+//This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+//© MattDeLong
+
+//@version=4
+study("50ema + 105ema", overlay=true)
+ema105 = security(syminfo.tickerid, '30', ema(close, 105))
+ema50 = security(syminfo.tickerid, '30', ema(close, 50))
+
+aa = plot(timeframe.isintraday ? ema50 : na, linewidth=1, color=color.teal, editable=true)
+bb = plot(timeframe.isintraday ? ema105 : na,linewidth=2, color=color.teal, editable=true)
+fill(aa, bb, color=color.gray)
+
+body = abs(open-close)
+us = open < close ? high-close : high-open
+ls = open < close ? open-low : close-low
+
+// data = (us < body*0.1 and ls>body*2)
+hammer = us < body * 0.2 and ls > body * 2
+//inverted_hammer = ls < body*0.2 and us>body*2/plotshape(hammer, style=shape.cross, location=location.belowbar, color=color.green, size=size.small)
+
+
+// === ALERT === 
+//alertcondition(hammer, title="Hammer Buy", message="Hammer: Play break higher")
+
+
+
+//@version=5
+// ══════════════════════════════════════════════════════════════════════════════════════════════════ //
+//# * ══════════════════════════════════════════════════════════════════════════════════════════════
+//# *
+//# * Study       : Auto Fib Channels
+//# *                - Auto Fib Channels, derived from build-in Auto Fib Retracement
+//# *                - Auto Fib Retracement, build-in, customized to fit with Auto Fib Channels
+//# *                - Zig Zag, derived from build-in Auto Fib Retracement 
+//# * Author      : © dgtrd
+//# *
+//# * Revision History
+//# *  Release    : Apr 05, 2021
+//# *  Update     : Apr 13, 2021 : Fibonacci Extensions are added as an alternative option to Fibonacci Retracements
+//# *  Update     : Feb 15, 2022 : Thanks to New Pine Feature, added backgroud coloring option
+//# *
+//# * ══════════════════════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════════════════════════ //
+
+indicator('Auto Fib Channels by DGT', 'FibChannels ʙʏ DGT ☼☾', true, max_lines_count=144)
+
+// -Inputs ══════════════════════════════════════════════════════════════════════════════════════ //
+tooltip_threshold = 'Deviation is a multiplier that affects how much the price should deviate from the previous pivot in order for the bar to become a new pivot' + 
+                     '\n\nDepth affects the minimum number of bars that will be taken into account when building'
+
+// ---------------------------------------------------------------------------------------- //
+// pivots threshold
+
+threshold_multiplier = input.float(3, 'Deviation', minval=0, inline='Pivots', tooltip=tooltip_threshold)
+dev_threshold        = ta.atr(10) / close * 100 * threshold_multiplier
+depth                = input.int(11, 'Depth', minval=1, inline='Pivots')
+
+// pivots threshold
+// ---------------------------------------------------------------------------------------- //
+// Zig Zag
+
+ZigZag  = input.bool(false, 'Zig Zag', inline='ZZ', group='Zig Zag Settings')
+zzColor = input.color(color.orange, '', inline='ZZ', group='Zig Zag Settings')
+zzWidth = input.int(1, '', minval=1, inline='ZZ', group='Zig Zag Settings')
+zzStyle = input.string('Solid', '', options=['Dashed', 'Dotted', 'Solid'], inline='ZZ', group='Zig Zag Settings')
+
+// Zig Zag
+// ---------------------------------------------------------------------------------------- //
+// Fibonacci 
+
+group_fib_RetExt = 'Channel / Retracement-Extention Settings'
+
+isFibChannel  = input.bool(true, 'Fib Channel     |   ', inline='FIB', group=group_fib_RetExt)
+fibExtRet     = input.string('Fib Retracement', '', options=['Fib Retracement', 'Fib Extention'], inline='FIB', group=group_fib_RetExt)
+
+isFibRetOrExt = input.bool(true, '', inline='FIB', group=group_fib_RetExt)
+
+histPivot     = input.int(0, 'Historical Channels / Retracements-Extentions', minval=0, inline='hPVT', group=group_fib_RetExt)
+extendL       = input.bool(false, 'Extend Lines', group=group_fib_RetExt)
+reverse       = input.bool(false, 'Reverse Retracement-Extention Levels', group=group_fib_RetExt)
+
+bgChannel     = input.bool(true, 'Channel Background', group=group_fib_RetExt)
+
+channelLevels = input.bool(true, 'Level Labels : Channel | Retracement-Extention', inline='Levels', group=group_fib_RetExt)
+retExtLevels  = input.bool(true, '', inline='Levels', group=group_fib_RetExt)
+levelPrices   = input.bool(true, 'Prices    |    Levels', inline='Levels2', group=group_fib_RetExt)
+levelLevels   = input.bool(true, '', inline='Levels2', group=group_fib_RetExt)
+levelFormat   = input.string('Values', '', options=['Values', 'Percent'], inline='Levels2', group=group_fib_RetExt)
+
+uniColor      = input.bool(false, 'UniColor : Channels | Retracements-Extentions', inline='uni', group=group_fib_RetExt)
+uniColor1     = input.color(#0ac9f0, '', inline='uni', group=group_fib_RetExt)
+uniColor2     = input.color(#ffa726, '', inline='uni', group=group_fib_RetExt)
+// Fibonacci 
+// ---------------------------------------------------------------------------------------- //
+
+// -Calculations ════════════════════════════════════════════════════════════════════════════════ //
+
+var line lineLast = na
+var int iLast     = 0
+var int iPrev     = 0
+var float pLast   = 0
+var isHighLast    = false  // otherwise the last pivot is a low pivot
+
+var iPrevPivot = 0
+var pPrevPivot = 0.
+var iLastPivot = 0
+var pLastPivot = 0.
+
+pivots(src, length, isHigh) =>
+    l2 = length * 2
+    c = nz(src[length])
+    ok = true
+
+    for i = 0 to l2 by 1
+        if isHigh and src[i] > c
+            ok := false
+            ok
+
+        if not isHigh and src[i] < c
+            ok := false
+            ok
+    if ok
+        [bar_index[length], c]
+    else
+        [int(na), float(na)]
+
+[iH, pH] = pivots(high, depth / 2, true )
+[iL, pL] = pivots(low , depth / 2, false)
+
+calc_dev(base_price, price) =>
+    100 * (price - base_price) / price
+
+pivotFound(dev, isHigh, index, price) =>
+    if isHighLast == isHigh and not na(lineLast)
+        // same direction
+        if isHighLast ? price > pLast : price < pLast
+            line.set_xy2(lineLast, index, price)
+            [lineLast, isHighLast]
+        else
+            [line(na), bool(na)]
+    else
+        // reverse the direction (or create the very first line)
+        if math.abs(dev) > dev_threshold
+            // price move is significant
+
+            // ---------------------------------------------------------------------------------------- //
+            [zzCol, zzWid, zzSty] = if not ZigZag
+                [na, 1, line.style_dashed]
+            else
+                [zzColor, zzWidth, zzStyle == 'Solid' ? line.style_solid : zzStyle == 'Dotted' ? line.style_dotted : line.style_dashed]
+            // ---------------------------------------------------------------------------------------- //
+
+            id = line.new(iLast, pLast, index, price, color=zzCol, width=zzWid, style=zzSty)
+            [id, isHigh]
+        else
+            [line(na), bool(na)]
+
+if not na(iH)
+    dev = calc_dev(pLast, pH)
+    [id, isHigh] = pivotFound(dev, true, iH, pH)
+
+    if not na(id)
+        if id != lineLast
+            // ---------------------------------------------------------------------------------------- //
+            iPrevPivot := line.get_x1(lineLast)
+            pPrevPivot := line.get_y1(lineLast)
+            iLastPivot := line.get_x2(lineLast)
+            pLastPivot := line.get_y2(lineLast)
+
+            if not ZigZag
+            // ---------------------------------------------------------------------------------------- //
+
+                line.delete(lineLast)
+
+        lineLast := id
+        isHighLast := isHigh
+        iPrev := iLast
+        iLast := iH
+        pLast := pH
+        pLast
+else
+    if not na(iL)
+        dev = calc_dev(pLast, pL)
+        [id, isHigh] = pivotFound(dev, false, iL, pL)
+
+        if not na(id)
+            if id != lineLast
+                // ---------------------------------------------------------------------------------------- //
+                iPrevPivot := line.get_x1(lineLast)
+                pPrevPivot := line.get_y1(lineLast)
+                iLastPivot := line.get_x2(lineLast)
+                pLastPivot := line.get_y2(lineLast)
+
+                if not ZigZag
+                // ---------------------------------------------------------------------------------------- //
+
+                    line.delete(lineLast)
+
+            lineLast := id
+            isHighLast := isHigh
+            iPrev := iLast
+            iLast := iL
+            pLast := pL
+            pLast
+
+iStartBase = histPivot > 0 ? ta.valuewhen(ta.change(iPrevPivot), iPrevPivot, histPivot)     : ta.valuewhen(ta.change(iPrevPivot), iPrevPivot, 0)
+pStartBase = histPivot > 0 ? ta.valuewhen(ta.change(pPrevPivot), pPrevPivot, histPivot)     : ta.valuewhen(ta.change(pPrevPivot), pPrevPivot, 0)
+iEndBase   = histPivot > 0 ? ta.valuewhen(ta.change(iLastPivot), iLastPivot, histPivot - 1) : line.get_x2(lineLast)
+pEndBase   = histPivot > 0 ? ta.valuewhen(ta.change(pLastPivot), pLastPivot, histPivot - 1) : line.get_y2(lineLast)
+iMidPivot  = histPivot > 0 ? ta.valuewhen(ta.change(iPrevPivot), iPrevPivot, histPivot - 1) : line.get_x1(lineLast)
+pMidPivot  = histPivot > 0 ? ta.valuewhen(ta.change(pPrevPivot), pPrevPivot, histPivot - 1) : line.get_y1(lineLast)
+
+slope      = (pEndBase - pStartBase) / (iEndBase - iStartBase)
+
+iPivotDiff = iMidPivot - iStartBase
+pPivotDiff = math.abs(pMidPivot - pStartBase)
+
+f_crossingLevel(sr, r) =>
+    r > sr and r < sr[1] or r < sr and r > sr[1]
+
+var a_ln = array.new_line()
+var a_lf = array.new_linefill()
+var a_cl = array.new_color()
+
+if ta.change(time) and array.size(a_ln) > 0
+    for i = 1 to array.size(a_ln) by 1
+        line.delete(array.shift(a_ln))
+
+if ta.change(time) and array.size(a_lf) > 0
+    for i = 1 to array.size(a_lf) by 1
+        linefill.delete(array.shift(a_lf))
+
+f_drawLineX(_iStart, _pStart, _iEnd, _pEnd, _color, _width, _style, _extend, _level) =>
+    style = _style == 'Solid' ? line.style_solid : _style == 'Dotted' ? line.style_dotted : line.style_dashed
+
+    if _iStart < bar_index + 500
+        array.push(a_ln, line.new(_iStart, _pStart, _iEnd, _pEnd, xloc.bar_index, extendL ? extend.both : extend.right, _color, style, _width))
+
+f_drawLine(_price, _color, _ext) =>
+    var id = line.new(iLast, _price, bar_index, _price, xloc.bar_index, extendL ? extend.both : extend.right, _color, line.style_solid, 1)
+    if not na(lineLast)
+        line.set_xy1(id, _ext ? iMidPivot : iStartBase, _price)
+        line.set_xy2(id, line.get_x2(lineLast), _price)
+
+f_drawLabel(index, price, txt, colorx, txtColor, style, size, align, tooltip) =>
+    labelsAlignStr = txt + '\n ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏ \n'
+
+    var id = label.new(index, price, txt, color=colorx, textcolor=txtColor, style=style, size=size, textalign=align)
+    label.set_xy(id, index, price)
+    label.set_text(id, labelsAlignStr)
+    label.set_textcolor(id, txtColor)
+    label.set_tooltip(id, tooltip)
+
+f_labelText(level, price, txt) =>
+    l = levelFormat == 'Values' ? txt + str.tostring(level) : txt + str.tostring(level * 100) + '%'
+    (levelLevels ? l : '') + (levelPrices ? ' (' + str.tostring(price, format.mintick) + ')' : '')
+
+f_getTooltip(level, price, fibTool) =>
+    fibTool + ' Level ' + str.tostring(level) + ' : ' + str.tostring(price, format.mintick)
+    
+if isFibChannel or (fibExtRet == 'Fib Extention' and isFibRetOrExt)
+    array.push(a_ln, line.new(iStartBase, pStartBase, iMidPivot, pMidPivot, xloc.bar_index, extend.none, color.gray, line.style_dashed, 1))
+    array.push(a_ln, line.new(iMidPivot , pMidPivot , iEndBase , pEndBase , xloc.bar_index, extend.none, color.gray, line.style_dashed, 1))
+if fibExtRet == 'Fib Retracement' and isFibRetOrExt and not isFibChannel
+    array.push(a_ln, line.new(iStartBase, pStartBase, iMidPivot, pMidPivot, xloc.bar_index, extend.none, color.gray, line.style_dashed, 1))
+
+processLevel(show, value, colorL) =>
+    if isFibChannel
+        if show
+            iStart    = int(math.round(iStartBase + iPivotDiff * value))
+            intercept = pStartBase < pMidPivot ? pStartBase + pPivotDiff * value - slope * iStart : pStartBase - pPivotDiff * value - slope * iStart
+            pStart    = slope * iStart + intercept
+            iEnd      = iStart < iEndBase ? iEndBase : iStart + 1 // bar_index
+            pEnd      = slope * iEnd + intercept
+            pLastBar  = slope * bar_index + intercept
+
+            f_drawLineX(iStart, pStart, iEnd, pEnd, uniColor ? uniColor1 : colorL, 1, 'Solid', true, value)
+
+            if channelLevels
+                f_drawLabel(bar_index, pLastBar, f_labelText(value, pLastBar, 'CHL '), #00000000                    , uniColor ? uniColor1 : colorL, label.style_label_left, size.normal, text.align_left, f_getTooltip(value, pLastBar, 'Fib Channel'))
+                f_drawLabel(bar_index, pLastBar, ''                                   , uniColor ? uniColor1 : colorL, #00000000                    , label.style_circle    , size.auto  , text.align_left, '')
+
+            if f_crossingLevel(close, pLastBar)
+                alert('AutoFibChannel: ' + syminfo.ticker + ' crossing level ' + str.tostring(value))
+            
+            if bgChannel
+                cLines = array.size(a_ln)
+                if cLines == 3
+                    array.push(a_cl, colorL)
+                if cLines > 3
+                    array.push(a_lf, linefill.new(array.get(a_ln, cLines - 2), array.get(a_ln, cLines - 1), color.new(array.pop(a_cl), 89)))
+                    array.push(a_cl, colorL)
+
+    if isFibRetOrExt
+        r = 0.
+        isExt = false
+
+        if fibExtRet == 'Fib Extention'
+            isExt := true
+            offset = math.abs(pMidPivot - pEndBase)
+            r := pEndBase < pMidPivot ? pMidPivot - offset + (reverse ? -1 : 1) * pPivotDiff * value : pMidPivot + offset - (reverse ? -1 : 1) * pPivotDiff * value
+            r
+        else
+            r := pStartBase < pMidPivot ? (reverse ? pMidPivot : pStartBase) + (reverse ? -1 : 1) * pPivotDiff * value : (reverse ? pMidPivot : pStartBase) - (reverse ? -1 : 1) * pPivotDiff * value
+            r
+
+        if show
+            f_drawLine(r, uniColor ? uniColor2 : colorL, isExt)
+
+            if retExtLevels
+                f_drawLabel(isExt ? iMidPivot : iStartBase, r, f_labelText(value, r, (isExt ? 'EXT ' : 'RET ')), #00000000, uniColor ? uniColor2 : colorL, label.style_label_right, size.normal, text.align_right, f_getTooltip(value, r, (isExt ? 'Fib Extention' : 'Fib Retracement')))
+
+            if f_crossingLevel(close, r)
+                alert('Autofib: ' + syminfo.ticker + ' crossing level ' + str.tostring(value))
+
+group_fib_levels = 'Channel / Retracement-Extention Levels'
+
+show_0          = input.bool (true   , '', inline='Level0' , group=group_fib_levels)
+value_0         = input.float(0.     , '', inline='Level0' , group=group_fib_levels)
+color_0         = input.color(#787b86, '', inline='Level0' , group=group_fib_levels)
+
+show_0_236      = input.bool (true   , '', inline='Level0' , group=group_fib_levels)
+value_0_236     = input.float(0.236  , '', inline='Level0' , group=group_fib_levels)
+color_0_236     = input.color(#f44336, '', inline='Level0' , group=group_fib_levels)
+
+show_0_382      = input.bool (true   , '', inline='Level1' , group=group_fib_levels)
+value_0_382     = input.float(0.382  , '', inline='Level1' , group=group_fib_levels)
+color_0_382     = input.color(#81c784, '', inline='Level1' , group=group_fib_levels)
+
+show_0_5        = input.bool (true   , '', inline='Level1' , group=group_fib_levels)
+value_0_5       = input.float(0.5    , '', inline='Level1' , group=group_fib_levels)
+color_0_5       = input.color(#4caf50, '', inline='Level1' , group=group_fib_levels)
+
+show_0_618      = input.bool (true   , '', inline='Level2' , group=group_fib_levels)
+value_0_618     = input.float(0.618  , '', inline='Level2' , group=group_fib_levels)
+color_0_618     = input.color(#009688, '', inline='Level2' , group=group_fib_levels)
+
+show_0_65       = input.bool (false  , '', inline='Level2' , group=group_fib_levels)
+value_0_65      = input.float(0.65   , '', inline='Level2' , group=group_fib_levels)
+color_0_65      = input.color(#009688, '', inline='Level2' , group=group_fib_levels)
+
+show_0_786      = input.bool (true   , '', inline='Level3' , group=group_fib_levels)
+value_0_786     = input.float(0.786  , '', inline='Level3' , group=group_fib_levels)
+color_0_786     = input.color(#64b5f6, '', inline='Level3' , group=group_fib_levels)
+
+show_1          = input.bool (true   , '', inline='Level3' , group=group_fib_levels)
+value_1         = input.float(1.     , '', inline='Level3' , group=group_fib_levels)
+color_1         = input.color(#787b86, '', inline='Level3' , group=group_fib_levels)
+
+show_1_272      = input.bool (false  , '', inline='Level4' , group=group_fib_levels)
+value_1_272     = input.float(1.272  , '', inline='Level4' , group=group_fib_levels)
+color_1_272     = input.color(#81c784, '', inline='Level4' , group=group_fib_levels)
+
+show_1_414      = input.bool (false  , '', inline='Level4' , group=group_fib_levels)
+value_1_414     = input.float(1.414  , '', inline='Level4' , group=group_fib_levels)
+color_1_414     = input.color(#f44336, '', inline='Level4' , group=group_fib_levels)
+
+show_1_618      = input.bool (true   , '', inline='Level5' , group=group_fib_levels)
+value_1_618     = input.float(1.618  , '', inline='Level5' , group=group_fib_levels)
+color_1_618     = input.color(#2196f3, '', inline='Level5' , group=group_fib_levels)
+
+show_1_65       = input.bool (false  , '', inline='Level5' , group=group_fib_levels)
+value_1_65      = input.float(1.65   , '', inline='Level5' , group=group_fib_levels)
+color_1_65      = input.color(#2196f3, '', inline='Level5' , group=group_fib_levels)
+
+show_2_618      = input.bool (false  , '', inline='Level6' , group=group_fib_levels)
+value_2_618     = input.float(2.618  , '', inline='Level6' , group=group_fib_levels)
+color_2_618     = input.color(#f44336, '', inline='Level6' , group=group_fib_levels)
+
+show_2_65       = input.bool (false  , '', inline='Level6' , group=group_fib_levels)
+value_2_65      = input.float(2.65   , '', inline='Level6' , group=group_fib_levels)
+color_2_65      = input.color(#f44336, '', inline='Level6' , group=group_fib_levels)
+
+show_3_618      = input.bool (false  , '', inline='Level7' , group=group_fib_levels)
+value_3_618     = input.float(3.618  , '', inline='Level7' , group=group_fib_levels)
+color_3_618     = input.color(#9c27b0, '', inline='Level7' , group=group_fib_levels)
+
+show_3_65       = input.bool (false  , '', inline='Level7' , group=group_fib_levels)
+value_3_65      = input.float(3.65   , '', inline='Level7' , group=group_fib_levels)
+color_3_65      = input.color(#9c27b0, '', inline='Level7' , group=group_fib_levels)
+
+show_4_236      = input.bool (false  , '', inline='Level8' , group=group_fib_levels)
+value_4_236     = input.float(4.236  , '', inline='Level8' , group=group_fib_levels)
+color_4_236     = input.color(#e91e63, '', inline='Level8' , group=group_fib_levels)
+
+show_4_618      = input.bool (false  , '', inline='Level8' , group=group_fib_levels)
+value_4_618     = input.float(4.618  , '', inline='Level8' , group=group_fib_levels)
+color_4_618     = input.color(#81c784, '', inline='Level8' , group=group_fib_levels)
+
+show_neg_0_236  = input.bool (false  , '', inline='Level9' , group=group_fib_levels)
+value_neg_0_236 = input.float(-0.236 , '', inline='Level9' , group=group_fib_levels)
+color_neg_0_236 = input.color(#f44336, '', inline='Level9' , group=group_fib_levels)
+
+show_neg_0_382  = input.bool (false  , '', inline='Level9' , group=group_fib_levels)
+value_neg_0_382 = input.float(-0.382 , '', inline='Level9' , group=group_fib_levels)
+color_neg_0_382 = input.color(#81c784, '', inline='Level9' , group=group_fib_levels)
+
+show_neg_0_618  = input.bool (true   , '', inline='Level10', group=group_fib_levels)
+value_neg_0_618 = input.float(-0.618 , '', inline='Level10', group=group_fib_levels)
+color_neg_0_618 = input.color(#009688, '', inline='Level10', group=group_fib_levels)
+
+show_neg_0_65   = input.bool (false  , '', inline='Level10', group=group_fib_levels)
+value_neg_0_65  = input.float(-0.65  , '', inline='Level10', group=group_fib_levels)
+color_neg_0_65  = input.color(#009688, '', inline='Level10', group=group_fib_levels)
+
+processLevel(show_neg_0_65 , value_neg_0_65 , color_neg_0_65 )
+processLevel(show_neg_0_618, value_neg_0_618, color_neg_0_618)
+processLevel(show_neg_0_382, value_neg_0_382, color_neg_0_382)
+processLevel(show_neg_0_236, value_neg_0_236, color_neg_0_236)
+processLevel(show_0        , value_0        , color_0        )
+processLevel(show_0_236    , value_0_236    , color_0_236    )
+processLevel(show_0_382    , value_0_382    , color_0_382    )
+processLevel(show_0_5      , value_0_5      , color_0_5      )
+processLevel(show_0_618    , value_0_618    , color_0_618    )
+processLevel(show_0_65     , value_0_65     , color_0_65     )
+processLevel(show_0_786    , value_0_786    , color_0_786    )
+processLevel(show_1        , value_1        , color_1        )
+processLevel(show_1_272    , value_1_272    , color_1_272    )
+processLevel(show_1_414    , value_1_414    , color_1_414    )
+processLevel(show_1_618    , value_1_618    , color_1_618    )
+processLevel(show_1_65     , value_1_65     , color_1_65     )
+processLevel(show_2_618    , value_2_618    , color_2_618    )
+processLevel(show_2_65     , value_2_65     , color_2_65     )
+processLevel(show_3_618    , value_3_618    , color_3_618    )
+processLevel(show_3_65     , value_3_65     , color_3_65     )
+processLevel(show_4_236    , value_4_236    , color_4_236    )
+processLevel(show_4_618    , value_4_618    , color_4_618    )
+
+// Fibonacci 
+// ---------------------------------------------------------------------------------------- //
+
+var table logo = table.new(position.bottom_right, 1, 1)
+table.cell(logo, 0, 0, '☼☾  ', text_size=size.normal, text_color=color.teal)
+
+
+https://www.tradingview.com/script/0WOo54ab-Candle-Type-The-Strat/
+
+//@version=4
+////////////////////////////////////////////////////////////
+//  Copyright by HPotter v1.0 25/12/2021
+// This is combo strategies for get a cumulative signal. 
+//
+// First strategy
+// This indicator plots 2/20 exponential moving average. For the Mov 
+// Avg X 2/20 Indicator, the EMA bar will be painted when the Alert criteria is met.
+//
+// Second strategy
+// This startegy based on 3-day pattern reversal described in "Are Three-Bar 
+// Patterns Reliable For Stocks" article by Thomas Bulkowski, presented in 
+// January,2000 issue of Stocks&Commodities magazine.
+// That pattern conforms to the following rules:
+// - It uses daily prices, not intraday or weekly prices;
+// - The middle day of the three-day pattern has the lowest low of the three days, with no ties allowed;
+// - The last day must have a close above the prior day's high, with no ties allowed;
+// - Each day must have a nonzero trading range. 
+//
+// WARNING:
+// - For purpose educate only
+// - This script to change bars colors.
+////////////////////////////////////////////////////////////
+EMA20(Length ) =>
+    pos = 0.0
+    xPrice = close
+    xXA = ema(xPrice, Length)
+    nHH = max(high, high[1])
+    nLL = min(low, low[1])
+    nXS = iff((nLL > xXA)or(nHH < xXA), nLL, nHH)
+    pos := iff(nXS > close[1] , -1, iff(nXS < close[1] , 1, nz(pos[1], 0))) 
+	pos
+
+BarR()=>
+    pos = 0.0
+    pos :=	iff(open[2] > close[2] and high[1] < high[2] and low[1] < low[2] and low[0] > low[1] and high[0] > high[1], 1,
+    	     iff(open[2] < close[2] and high[1] > high[2] and low[1] > low[2] and high[0] < high[1] and low[0] < low[1], -1, nz(pos[1], 0))) 
+    pos
+
+strategy(title="Combo 2/20 EMA & 3 Day Pattern", shorttitle="Combo", overlay = true)
+var I1  = "●═════ 2/20 EMA ═════●"
+Length = input(14, minval=1, group = I1)
+//var I2  = "●═════ 3-Bar-Reversal-Pattern ═════●"
+var misc  = "●═════ MISC ═════●"
+reverse = input(false, title="Trade reverse", group = misc)
+var timePeriodHeader  = "●═════ Time Start ═════●"
+d = input(1, title="From Day", minval=1, maxval=31, group=timePeriodHeader)
+m = input(1, title="From Month", minval=1, maxval=12, group=timePeriodHeader)
+y = input(2005, title="From Year", minval=0, group=timePeriodHeader)
+
+StartTrade = time > timestamp(y, m, d, 00, 00) ? true : false
+prePos3Bar = BarR()
+
+posEMA20 = EMA20(Length)
+pos3BarR = security(syminfo.tickerid, "D", prePos3Bar[1], barmerge.gaps_off, barmerge.lookahead_on)
+pos = iff(posEMA20 == 1 and pos3BarR == 1 and StartTrade , 1,
+	   iff(posEMA20 == -1 and pos3BarR == -1 and StartTrade, -1, 0)) 
+possig = iff(reverse and pos == 1, -1,
+          iff(reverse and pos == -1 , 1, pos))	   
+if (possig == 1 ) 
+    strategy.entry("Long", strategy.long)
+if (possig == -1 )
+    strategy.entry("Short", strategy.short)	 
+if (possig == 0) 
+    strategy.close_all()
+barcolor(possig == -1 ? #b50404: possig == 1 ? #079605 : #0536b3 )
+
+
+//@version=4
+////////////////////////////////////////////////////////////
+//  Copyright by HPotter v1.0 15/09/2020
+// This is combo strategies for get a cumulative signal. 
+//
+// First strategy
+// This System was created from the Book "How I Tripled My Money In The 
+// Futures Market" by Ulf Jensen, Page 183. This is reverse type of strategies.
+// The strategy buys at market, if close price is higher than the previous close 
+// during 2 days and the meaning of 9-days Stochastic Slow Oscillator is lower than 50. 
+// The strategy sells at market, if close price is lower than the previous close price 
+// during 2 days and the meaning of 9-days Stochastic Fast Oscillator is higher than 50.
+//
+// Second strategy
+// The name ‘Floor-Trader Pivot,’ came from the fact that Pivot points can 
+// be calculated quickly, on the fly using price data from the previous day 
+// as an input. Although time-frames of less than a day can be used, Pivots are 
+// commonly plotted on the Daily Chart; using price data from the previous day’s 
+// trading activity. 
+//
+// WARNING:
+// - For purpose educate only
+// - This script to change bars colors.
+////////////////////////////////////////////////////////////
+Reversal123(Length, KSmoothing, DLength, Level) =>
+    vFast = sma(stoch(close, high, low, Length), KSmoothing) 
+    vSlow = sma(vFast, DLength)
+    pos = 0.0
+    pos := iff(close[2] < close[1] and close > close[1] and vFast < vSlow and vFast > Level, 1,
+	         iff(close[2] > close[1] and close < close[1] and vFast > vSlow and vFast < Level, -1, nz(pos[1], 0))) 
+	pos
+
+
+FPP() =>
+    pos = 0
+    xHigh  = security(syminfo.tickerid,"D", high[1])
+    xLow   = security(syminfo.tickerid,"D", low[1])
+    xClose = security(syminfo.tickerid,"D", close[1])
+    vPP = (xHigh+xLow+xClose) / 3
+    vR1 = (vPP * 2) - xLow
+    vS1 = (vPP * 2) - xHigh
+    pos := iff(close > vR1, 1,
+             iff(close < vS1, -1, nz(pos[1], 0))) 
+    pos
+
+strategy(title="Combo Backtest 123 Reversal & Floor Pivot Points", shorttitle="Combo", overlay = true)
+Length = input(15, minval=1)
+KSmoothing = input(1, minval=1)
+DLength = input(3, minval=1)
+Level = input(50, minval=1)
+//-------------------------
+reverse = input(false, title="Trade reverse")
+posReversal123 = Reversal123(Length, KSmoothing, DLength, Level)
+posFPP = FPP()
+pos = iff(posReversal123 == 1 and posFPP == 1 , 1,
+	   iff(posReversal123 == -1 and posFPP == -1, -1, 0)) 
+possig = iff(reverse and pos == 1, -1,
+          iff(reverse and pos == -1 , 1, pos))	   
+if (possig == 1) 
+    strategy.entry("Long", strategy.long)
+if (possig == -1)
+    strategy.entry("Short", strategy.short)	 
+if (possig == 0) 
+    strategy.close_all()
+barcolor(possig == -1 ? #b50404: possig == 1 ? #079605 : #0536b3 )
+
+//This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+//@version=4
+//Author = https://www.tradingview.com/u/Dustin_D_RLT/
+//Conditional Trailing Stops
+study(title="Conditional Trailing Stops", shorttitle = "CTS", overlay=true, resolution="")
+//Turn On / Off different stops
+enableLongStops = input(title="Enable Long Stops", defval="Yes", options=["Yes", "No"])
+longStopsYes = enableLongStops == "Yes"
+enableShortStops = input(title="Enable Short Stops", defval="Yes", options=["Yes", "No"])
+shortStopsYes = enableShortStops == "Yes"
+enableNormalStops = input(title="Enable Normal Stops", defval="Yes", options=["Yes", "No"])
+normalStopsYes = enableNormalStops == "Yes"
+enableAggStops = input(title="Enable Aggressive Stops", defval="Yes", options=["Yes", "No"])
+aggStopsYes = enableAggStops == "Yes"
+//Normal "Lookback Length"
+lookbackLength = input(4, minval=1, title="Conditional Trailing Stops Lookback Length")
+normalOffset = input(0, minval=0, title="Conditional Trailing Stops Offset (Move on Close or Open)")
+pastHigh = highest(high, lookbackLength)
+pastLow = lowest(low, lookbackLength)
+//Aggressive "Lookback Length"
+aggLookbackLength = input(2, minval=1, title="Aggressive Trailing Stops Lookback Length")
+aggOffset = input(0, minval=0, title="Aggressive Trailing Stops Offset (Move on Close or Open)")
+aggPastHigh = highest(high, aggLookbackLength)
+aggPastLow = lowest(low, aggLookbackLength)
+//Next 2 lines for testing
+//plot(pastHigh, "Past High", color=#0094FF, offset=1)
+//plot(pastLow, "Past Low", color=#0094FF, offset=1)
+//Bollinger Bands
+basisBB = sma(close, 20)
+dev = 2 * stdev(close, 20)
+upperBB = basisBB + dev
+lowerBB = basisBB - dev
+//Next 5 lines for testing
+//offset = input(0, "Bollinger Offset", type = input.integer, minval = -500, maxval = 500)
+//plot(basisBB, "Basis", color=color.navy, offset = offset)
+//p1 = plot(upperBB, "Upper BB", color=color.navy, offset = offset)
+//p2 = plot(lowerBB, "Lower BB", color=color.navy, offset = offset)
+//fill(p1, p2, title = "Background", color=#198787, transp=98)
+//Intitial ATR Multiple Stop Location
+atrValue = (rma(tr(true), length=14))
+atrMult = input(2.0, minval=1.0, title="Stop ATR Multiple", step=.25)
+//Highwave Warning
+highWave = ((high - low) > atrValue and close > open and (high - low) > 5*(close - open)) or (close < open and (high - low) > 5*(open - close)) or (close == open)
+//Long - Normal Conditional Trailing Stops
+tightStop = (low > upperBB and low > pastHigh[1] and highWave)
+condition1Stop = (close > upperBB)
+condition2Stop = (close > pastHigh[1])
+atrStop = close[1] < pastLow[2] and close > pastLow[1]
+tightStopLoc = low
+condition1StopLoc = pastLow
+condition2StopLoc = pastLow[1]
+atrStopLoc = (high - (atrValue * atrMult))
+trailStop = tightStop and longStopsYes and normalStopsYes ? tightStopLoc : condition1Stop and longStopsYes and normalStopsYes ? condition1StopLoc : condition2Stop and longStopsYes and normalStopsYes ? condition2StopLoc : atrStop and longStopsYes and normalStopsYes ? atrStopLoc : na
+plot(trailStop, "Conditional Trailing Stop", linewidth=4, color=color.red, style=plot.style_circles, offset=normalOffset)
+//Holds value of trailStop
+tS = valuewhen(trailStop and longStopsYes and normalStopsYes, trailStop, 0)
+plot(tS, title="Conditional Trailing Stop", linewidth=2, color=color.red, offset=normalOffset)
+//Short - Normal Conditional Trailing Stops
+shortTightStop = (high < lowerBB and high < pastLow[1] and highWave)
+shortCondition1Stop = (close < lowerBB)
+shortCondition2Stop = (close < pastLow[1])
+shortAtrStop = close[1] > pastHigh[2] and close < pastHigh[1]
+shortTightStopLoc = high
+shortCondition1StopLoc = pastHigh
+shortCondition2StopLoc = pastHigh[1]
+shortAtrStopLoc = (low + (atrValue * atrMult))
+shortTrailStop = shortTightStop and shortStopsYes and normalStopsYes ? shortTightStopLoc : shortCondition1Stop and shortStopsYes and normalStopsYes ? shortCondition1StopLoc : shortCondition2Stop and shortStopsYes and normalStopsYes ? shortCondition2StopLoc : shortAtrStop and shortStopsYes and normalStopsYes ? shortAtrStopLoc : na
+plot(shortTrailStop, "Short Conditional Trailing Stop", linewidth=4, color=color.maroon, style=plot.style_circles, offset=normalOffset)
+//Holds value of trailStop
+shortTS = valuewhen(shortTrailStop and shortStopsYes and normalStopsYes, shortTrailStop, 0)
+plot(shortTS, title="Conditional Trailing Stop", linewidth=2, color=color.maroon, offset=normalOffset)
+//Long - Aggressive Trailing Stops (Good for Intraday)
+aggStop = low[1] > low[2]
+aggStopLoc = aggPastLow[1] - ((aggPastHigh[1] - aggPastLow[1])*.05)
+aggTrailStop = aggStop and longStopsYes and aggStopsYes ? aggStopLoc : na
+plot(aggTrailStop, "Aggressive Trailing Stop", linewidth=4, color=color.orange, style=plot.style_circles, offset=aggOffset)
+//Holds value of trailStop
+aggTS = valuewhen(aggTrailStop and longStopsYes and aggStopsYes, aggTrailStop, 0)
+plot(aggTS, title="Aggressive Trailing Stop", linewidth=2, color=color.orange, offset=aggOffset)
+//Short - Aggressive Trailing Stops (Good for Intraday)
+shortAggStop = high[1] < high[2]
+shortAggStopLoc = aggPastHigh[1] + ((aggPastHigh[1] - aggPastLow[1])*.05)
+shortAggTrailStop = shortAggStop and shortStopsYes and aggStopsYes ? shortAggStopLoc : na
+plot(shortAggTrailStop, "Short Aggressive Trailing Stop", linewidth=4, color=color.purple, style=plot.style_circles, offset=aggOffset)
+//Holds value of trailStop
+shortAggTS = valuewhen(shortAggTrailStop and shortStopsYes and aggStopsYes, shortAggTrailStop, 0)
+plot(shortAggTS, title="Short Aggressive Trailing Stop", linewidth=2, color=color.purple, offset=aggOffset)
+
+
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Ross702
+
+//@version=5
+
+strategy('Daily Breakout Strategy', overlay=true, default_qty_value=1000000)
+
+// Get user input
+entryPips = input.float(title='Entry Pips', defval=3.0, tooltip='How many pips above high to place entry order')
+stopPips = input.float(title='Stop Pips', defval=5.0, tooltip='Fixed pip stop loss distance')
+targetPips = input.float(title='Target Pips', defval=10.0, tooltip='Fixed pip profit target distance')
+
+// Get highs and lows
+dailyHigh = request.security(syminfo.tickerid, 'D', high)
+dailyLow = request.security(syminfo.tickerid, 'D', low)
+
+// Determine buy & sell point (default 3 pips/30 points above/below high/low)
+buyPoint = dailyHigh + entryPips * 10 * syminfo.mintick
+sellPoint = dailyLow - entryPips * 10 * syminfo.mintick
+
+// Determine stop loss (default 5 pips/50 points above/below buy/sell point)
+stopLossLong = buyPoint - stopPips * 10 * syminfo.mintick
+stopLossShort = sellPoint + stopPips * 10 * syminfo.mintick
+
+// Determine take profit (default 10 pips/100 points above/below buy/sell point)
+takeProfitLong = buyPoint + targetPips * 10 * syminfo.mintick
+takeProfitShort = sellPoint - targetPips * 10 * syminfo.mintick
+
+// If a new day has started and we're flat, place a buy stop & sell stop
+var stopLossLongSaved = 0.0
+var takeProfitLongSaved = 0.0
+var stopLossShortSaved = 0.0
+var takeProfitShortSaved = 0.0
+newDay = ta.change(time('D'))
+if newDay
+    if strategy.position_size == 0
+        stopLossLongSaved := stopLossLong
+        takeProfitLongSaved := takeProfitLong
+        strategy.entry(id='Long', direction=strategy.long, stop=buyPoint, oca_name='x', oca_type=strategy.oca.cancel)
+        stopLossShortSaved := stopLossShort
+        takeProfitShortSaved := takeProfitShort
+        strategy.entry(id='Short', direction=strategy.short, stop=sellPoint, oca_name='x', oca_type=strategy.oca.cancel)
+
+// Exit our trade if our stop loss or take profit is hit
+strategy.exit(id='Long Exit', from_entry='Long', limit=takeProfitLongSaved, stop=stopLossLongSaved)
+strategy.exit(id='Short Exit', from_entry='Short', limit=takeProfitShortSaved, stop=stopLossShortSaved)
+
+// Draw data to the chart
+plot(dailyHigh, color=color.new(color.blue, 0), linewidth=2, title='Daily High')
+plot(dailyLow, color=color.new(color.blue, 0), linewidth=2, title='Daily Low')
+plot(buyPoint, color=color.new(color.purple, 0), title='Buy Stop')
+plot(stopLossLong, color=color.new(color.red, 0), title='Long Stop Loss')
+plot(takeProfitLong, color=color.new(color.green, 0), title='Long Profit Target')
+plot(sellPoint, color=color.new(color.purple, 0), title='Sell Stop')
+plot(stopLossShort, color=color.new(color.red, 0), title='Short Stop Loss')
+plot(takeProfitShort, color=color.new(color.green, 0), title='Short Profit Target')
+
+
+
+//@version=4
+// 
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © gregoirejohnb
+//
+// Moving average crossover systems measure drift in the market. They are great strategies for time-limited people.
+// So, why don't more people use them?
+// 
+// I think it's due to poor choice in choosing EMA lengths: Market Wizard Ed Seykota has a guideline for moving average crossovers: the slow line should be at least 3x the fast line.
+// This removes a lot of the whipsaws inherent in moving average systems, which means greater profitability.
+// His other piece of advice: long-only strategies are best in stock markets where there's a lot more upside potential.
+//
+// Using these simple rules, we can reduce a lot of the whipsaws and low profitability trades! This strategy was made so you can see for yourself before trading.
+//
+// === HOW TO USE THIS INDICATOR ===
+// 1) Choose your market and timeframe.
+// 2) Choose the length.
+// 3) Choose the multiplier.
+// 4) Choose if the strategy is long-only or bidirectional. 
+//
+// Don't overthink the above! We don't know the best answers, that's why this strategy exists! We're going to test and find out.
+//  After you find a good combination, set up an alert system with the default Exponential Moving Average indicators provided by TradingView.
+//
+// === TIPS ===
+// Increase the multiplier to reduce whipsaws (back and forth trades).
+// Increase the length to take fewer trades, decrease the length to take more trades.
+// Try a Long-Only strategy to see if that performs better.
+//
+strategy(title="EMA Crossover Strategy", shorttitle="EMA COS", overlay=true, pyramiding=0, default_qty_type=strategy.percent_of_equity, default_qty_value=10, currency=currency.USD,commission_type=strategy.commission.percent,commission_value=0.1)
+
+// === GENERAL INPUTS ===
+//strategy start date
+start_year = input(defval=2020, title="Backtest Start Year")
+
+// === LOGIC ===
+length = input(type=input.integer,defval=20,minval=1,title="Length")
+ratio = input(type=input.integer,defval=3,title="Multiplier (3x length, 4x length, etc)",options=[3,4,5,6,7,8,9,10])
+longOnly = input(type=input.bool,defval=false,title="Long Only")
+fast = ema(hl2,length)
+slow = ema(hl2,length * ratio)
+plot(fast,linewidth=2,color=color.orange,title="Fast")
+plot(slow,linewidth=2,color=color.blue,title="Slow")
+
+longEntry = crossover(fast,slow)
+shortEntry = crossunder(fast,slow)
+
+plotshape(longEntry ? close : na,style=shape.triangleup,color=color.green,location=location.belowbar,size=size.small,title="Long Triangle")
+plotshape(shortEntry and not longOnly ? close : na,style=shape.triangledown,color=color.red,location=location.abovebar,size=size.small,title="Short Triangle")
+plotshape(shortEntry and longOnly ? close : na,style=shape.xcross,color=color.black,location=location.abovebar,size=size.small,title="Exit Sign")
+
+// === STRATEGY - LONG POSITION EXECUTION ===
+enterLong() =>
+    crossover(fast,slow) and 
+       time > timestamp(start_year, 1, 1, 01, 01)
+exitLong() =>
+    longOnly and crossunder(fast,slow)
+strategy.entry(id="Long", long=strategy.long, when=enterLong())
+strategy.close(id="Long", when=exitLong())
+// === STRATEGY - SHORT POSITION EXECUTION ===
+enterShort() =>
+    not longOnly and crossunder(fast,slow) and 
+       time > timestamp(start_year, 1, 1, 01, 01)
+exitShort() =>
+    false
+strategy.entry(id="Short", long=strategy.short, when=enterShort())
+strategy.close(id="Short", when=exitShort())
+
+//@version=4
+//Author = Dustin Drummond https://www.tradingview.com/u/Dustin_D_RLT/
+//Strategy based in part on original 10ema Basic Swing Trade Strategy by Matt Delong: https://www.tradingview.com/u/MattDeLong/
+//Link to original 10ema Basic Swing Trade Strategy: https://www.tradingview.com/script/8yhGnGCM-10ema-Basic-Swing-Trade-Strategy/
+//This is the Original EMAC - Exponential Moving Average Cross Strategy built as a class for reallifetrading dot com and so has all the default settings and has not been optimized
+//I would not recomend using this strategy with the default settings and is for educational purposes only
+//For the fully optimized version please come back around the same time tomorrow 6/16/21 for the EMAC - Exponential Moving Average Cross - Optimized
+//EMAC - Exponential Moving Average Cross
+strategy(title="EMAC - Exponential Moving Average Cross", shorttitle = "EMAC", overlay = true, calc_on_every_tick=false, default_qty_value = 100, initial_capital = 100000, default_qty_type = strategy.fixed, pyramiding = 0, process_orders_on_close=true)
+//creates a time filter to prevent "too many orders error" and allows user to see Strategy results per year by changing input in settings in Stratey Tester
+startYear = input(2015, title="Start Year", minval=1980, step=1)
+timeFilter = (year >= startYear) and (month >= 1) and (dayofmonth >= 1)
+//R Size (Risk Amount)
+rStaticOrPercent = input(title="R Static or Percent", defval="Static", options=["Static", "Percent"])
+rSizeStatic = input(2000, title="R Size Static", minval=1, step=100)
+rSizePercent = input(3, title="R Size Percent", minval=.01, step=.01)
+rSize = rStaticOrPercent == "Static" ? rSizeStatic : rStaticOrPercent == "Percent" ? (rSizePercent * .01 * strategy.equity) : 1
+//Recent Trend Indicator "See the standalone version for detailed description"
+res = input(title="Trend Timeframe", type=input.resolution, defval="W")
+trend = input(26, minval=1, title="# of Bars for Trend")
+trendMult = input(15, minval=0, title="Trend Growth %", step=.25) / 100
+currentClose = security(syminfo.tickerid, res, close)
+pastClose = security(syminfo.tickerid, res, close[trend])
+//Trend Indicator
+upTrend = (currentClose >= (pastClose * (1 + trendMult)))
+downTrend = (currentClose <= (pastClose * (1 - trendMult)))
+sidewaysUpTrend = (currentClose < (pastClose * (1 + trendMult)) and (currentClose > pastClose))
+sidewaysDownTrend = (currentClose > (pastClose * (1 - trendMult)) and (currentClose < pastClose))
+//Plot Trend on Chart
+plotshape(upTrend, "Up Trend", style=shape.square, location=location.top, color=color.green, size=size.small)
+plotshape(downTrend, "Down Trend", style=shape.square, location=location.top, color=color.red, size=size.small)
+plotshape(sidewaysUpTrend, "Sideways Up Trend", style=shape.square, location=location.top, color=color.yellow, size=size.small)
+plotshape(sidewaysDownTrend, "Sideways Down Trend", style=shape.square, location=location.top, color=color.orange, size=size.small)
+//What trend signals to use in entrySignal
+trendRequired = input(title="Trend Required", defval="Orange", options=["Green", "Yellow", "Orange", "Red"])
+goTrend = trendRequired == "Orange" ? upTrend or sidewaysUpTrend or sidewaysDownTrend : trendRequired == "Yellow" ? upTrend or sidewaysUpTrend : trendRequired == "Green" ? upTrend : trendRequired == "Red" ? upTrend or sidewaysUpTrend or sidewaysDownTrend or downTrend : na
+//MAs Inputs Defalt is 10 EMA, 20 EMA, 50 EMA, 100 SMA and 200 SMA
+ma1Length = input(10, title="MA1 Period", minval=1, step=1)
+ma1Type = input(title="MA1 Type", defval="EMA", options=["SMA", "EMA", "WMA"])
+ma2Length = input(20, title="MA2 Period", minval=1, step=1)
+ma2Type = input(title="MA2 Type", defval="EMA", options=["SMA", "EMA", "WMA"])
+ma3Length = input(50, title="MA3 Period", minval=1, step=1)
+ma3Type = input(title="MA3 Type", defval="EMA", options=["SMA", "EMA", "WMA"])
+ma4Length = input(100, title="MA4 Period", minval=1, step=1)
+ma4Type = input(title="MA4 Type", defval="SMA", options=["SMA", "EMA", "WMA"])
+ma5Length = input(200, title="MA5 Period", minval=1, step=1)
+ma5Type = input(title="MA5 Type", defval="SMA", options=["SMA", "EMA", "WMA"])
+//MAs defined
+ma1 = ma1Type == "EMA" ? ema(close, ma1Length) : ma1Type == "SMA" ? sma(close, ma1Length) : wma(close, ma1Length)
+ma2 = ma2Type == "EMA" ? ema(close, ma2Length) : ma2Type == "SMA" ? sma(close, ma2Length) : wma(close, ma2Length)
+ma3 = ma3Type == "EMA" ? ema(close, ma3Length) : ma3Type == "SMA" ? sma(close, ma3Length) : wma(close, ma3Length)
+ma4 = ma4Type == "SMA" ? sma(close, ma4Length) : ma4Type == "EMA" ? ema(close, ma4Length) : wma(close, ma4Length)
+ma5 = ma5Type == "SMA" ? sma(close, ma5Length) : ma5Type == "EMA" ? ema(close, ma5Length) : wma(close, ma5Length)
+//Plot MAs
+plot(ma1, title="MA1", color=color.yellow, linewidth=1, style=plot.style_line)
+plot(ma2, title="MA2", color=color.purple, linewidth=1, style=plot.style_line)
+plot(ma3, title="MA3", color=#00FFFF, linewidth=1, style=plot.style_line)
+plot(ma4, title="MA4", color=color.blue, linewidth=2, style=plot.style_line)
+plot(ma5, title="MA5", color=color.orange, linewidth=2, style=plot.style_line)
+//Allows user to toggle on/off ma1 > ma2 filter
+enableShortMAs = input(title="Enable Short MA Cross Filter", defval="Yes", options=["Yes", "No"])
+shortMACross = enableShortMAs == "Yes" and ma1 > ma2 or enableShortMAs == "No"
+//Allows user to toggle on/off ma4 > ma5 filter
+enableLongMAs = input(title="Enable Long MA Cross Filter", defval="Yes", options=["Yes", "No"])
+longMACross = enableLongMAs == "Yes" and ma4 >= ma5 or enableLongMAs == "No"
+//Entry Signals
+entrySignal = (strategy.position_size <= 0 and close[1] < ma1[1] and close > ma1 and close > ma2 and close > ma3 and shortMACross and ma1 > ma3 and longMACross and goTrend)
+secondSignal = (strategy.position_size > 0 and close[1] < ma1[1] and close > ma1 and close > ma2 and close > ma3 and shortMACross and ma1 > ma3 and longMACross and goTrend)
+plotshape(entrySignal, style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small)
+plotshape(secondSignal, style=shape.triangleup, location=location.belowbar, color=color.lime, size=size.small)
+//ATR for Stops
+atrValue = (atr(14))
+//to test ATR enable next line
+//plot(atrValue, linewidth=1, color=color.black, style=plot.style_line)
+atrMult = input(2.5, minval=.25, step=.25, title="Stop ATR Multiple")
+//Only target3Mult is used in current strategy target1 and target2 might be used in the future with pyramiding
+//target1Mult = input(1.0, minval=.25, step=.25, title="Targert 1 Multiple")
+//target2Mult = input(2.0, minval=.25, step=.25, title="Targert 2 Multiple")
+target3Mult = input(3.0, minval=.25, step=.25, title="Target Multiple")
+enableAtrStop = input(title="Enable ATR Stops", defval="Yes", options=["Yes", "No"])
+//Intitial Recomended Stop Location
+atrStop = entrySignal and ((high - (atrMult * atrValue)) < low) ? (high - (atrMult * atrValue)) : low
+//oneAtrStop is used for testing only enable next 2 lines to test
+//oneAtrStop = entrySignal ? (high - atrValue) : na
+//plot(oneAtrStop, "One ATR Stop", linewidth=2, color=color.orange, style=plot.style_linebr)
+initialStop = entrySignal and enableAtrStop == "Yes" ? atrStop : entrySignal ? low : na
+//Stops changed to stoploss to hold value for orders the next line is old code "bug"
+//plot(initialStop, "Initial Stop", linewidth=2, color=color.red, style=plot.style_linebr)
+//Set Initial Stop and hold value "debug code"
+stoploss = valuewhen(entrySignal, initialStop, 0)
+plot(stoploss, title="Stop", linewidth=2, color=color.red)
+enableStops = input(title="Enable Stops", defval="Yes", options=["Yes", "No"])
+yesStops = enableStops == "Yes" ? 1 : enableStops == "No" ? 0 : na
+//Calculate size of trade based on R Size
+//Original buggy code: 
+//positionSize = (rSize/(close - initialStop))
+//Added a minimum order size of 1 "debug code"
+positionSize = (rSize/(close - initialStop)) > 1 ? (rSize/(close - initialStop)) : 1
+//Targets
+//Enable or Disable Targets
+enableTargets = input(title="Enable Targets", defval="Yes", options=["Yes", "No"])
+yesTargets = enableTargets == "Yes" ? 1 : enableTargets == "No" ? 0 : na
+//Only target3 is used in current strategy target1 and target2 might be used in the future with pyramiding
+//target1 = entrySignal ? (close + ((close - initialStop) * target1Mult)) : na
+//target2 = entrySignal ? (close + ((close - initialStop) * target2Mult)) : na
+target3 = entrySignal ? (close + ((close - initialStop) * target3Mult)) : na
+//plot(target1, "Target 1", linewidth=2, color=color.green, style=plot.style_linebr)
+//plot(target2, "Target 2", linewidth=2, color=color.green, style=plot.style_linebr)
+plot(target3, "Target 3", linewidth=2, color=color.green, style=plot.style_linebr)
+//Set Target and hold value "debug code"
+t3 = valuewhen(entrySignal, target3, 0)
+//To test t3 and see plot enable next line
+//plot(t3, title="Target", linewidth=2, color=color.green)
+//MA1 Cross Exit
+enableEarlyExit = input(title="Enable Early Exit", defval="Yes", options=["Yes", "No"])
+earlyExit = enableEarlyExit == "Yes" ? 1 : enableEarlyExit == "No" ? 0 : na
+ma1CrossExit = strategy.position_size > 0 and close < ma1
+//Entry Order
+strategy.order("Entry", long = true, qty = positionSize, when = (strategy.position_size <= 0 and entrySignal and timeFilter))
+//Early Exit Order
+strategy.close_all(when = ma1CrossExit and timeFilter and earlyExit, comment = "MA1 Cross Exit")
+//Stop and Target Orders
+//strategy.cancel orders are needed to prevent bug with Early Exit Order
+strategy.order("Stop Loss", false, qty = strategy.position_size, stop=stoploss, oca_name="Exit", oca_type=strategy.oca.cancel, when = timeFilter and yesStops, comment = "Stop Loss")
+strategy.cancel("Stop Loss", when = ma1CrossExit and timeFilter and earlyExit)
+strategy.order("Target", false, qty = strategy.position_size, limit=t3, oca_name="Exit", oca_type=strategy.oca.cancel, when = timeFilter and yesTargets, comment = "Target")
+strategy.cancel("Target", when = ma1CrossExit and timeFilter and earlyExit)
+
+
+//@version=5
+// ══════════════════════════════════════════════════════════════════════════════════════════════════ //
+//# * ══════════════════════════════════════════════════════════════════════════════════════════════
+//# *
+//# * Study       : Fibonacci Extention / Retracment / Pivot Points
+//# *                - Volume and Volatility AddOns
+//# * Author      : © dgtrd
+//# *
+//# * Revision History
+//# *  Release    : Apr 19, 2021
+//# *  Update     : May 11, 2021 : added ability to draw simultaneously Extensions or Retracements + Pivot Points
+//# *                              added ability to filter Pivot Points Support or Resistance Levels based on Price Action
+//# *  Update     : May 22, 2021 : added ability to draw Historical Pivot Points
+//# *  Update     : Jan 29, 2022 : made labels much more customizable, slight improvments and converted to pine v5 
+//# *
+//# * ══════════════════════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════════════════════════ //
+
+indicator('Fibonacci Extention / Retracment / Pivot Points by DGT', 'FIBs ʙʏ DGT ☼☾', true, max_lines_count = 500, max_labels_count = 500)
+
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════ //
+//
+// Fibonacci Retracement / Extention / Pivot Points and Zig Zag
+// ══════════════════════════════════════════════════════════════════════════════════════════════════ //
+
+// ---------------------------------------------------------------------------------------------- //
+// -Inputs -------------------------------------------------------------------------------------- //
+
+tooltip_threshold   = 'Deviation is a multiplier that affects how much the price should deviate from the previous pivot in order for the bar to become a new pivot' + 
+                      '\n\nDepth affects the minimum number of bars that will be taken into account when building'
+
+tooltip_pivot_point = 'A pivot point is a technical analysis indicator used to determine the overall trend of the market over different time frames'
+
+tooltip_zigzag      = 'The Zig Zag indicator is used to identify price trends then connected by straight lines that help the trader visual the price action' + 
+                      'This indicator works to eliminate confusion over small price changes or fluctuations and aims to project trend changes overtime'
+// ---------------------------------------------------------------------------------------------- //
+
+group_pick   = 'Pick a Fibonacci Tool'
+
+i_isFib      = input.bool  (true, 'Pick a Fibonacci Tool', inline='FIB', group=group_pick)
+i_fibTool    = input.string('Pivot Points', '             ', 
+                             options=['Pivot Points', 'Retracements', 'Retracements + Pivot Points', 'Extentions', 'Extentions + Pivot Points'], inline='FIB', group=group_pick)
+
+i_fibTime    = input.bool (true, 'Fib Time Zones', inline='TZ', group=group_pick)
+i_tzColor    = input.color(#2196f3, ''           , inline='TZ', group=group_pick)
+// ---------------------------------------------------------------------------------------------- //
+
+group_pivot  = 'Fibonacci Pivot Points Settings'
+
+i_htf_mode   = input.string('Auto', 'Pivot Points TimeFrame', options=['Auto', 'User Defined'], inline='HTF', group=group_pivot, tooltip=tooltip_pivot_point)
+i_htf_user_  = input.string('Weekly', '          or User Defined', 
+                             options=['15 Min', '1 Hour', '4 Hour', 'Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'], inline='HTF1', group=group_pivot)
+
+i_htf_user   = i_htf_user_ == '15 Min'    ? '15'  : 
+               i_htf_user_ == '1 Hour'    ? '60'  : 
+               i_htf_user_ == '4 Hour'    ? '240' : 
+               i_htf_user_ == 'Daily'     ? 'D'   : 
+               i_htf_user_ == 'Weekly'    ? 'W'   : 
+               i_htf_user_ == 'Monthly'   ? 'M'   : 
+               i_htf_user_ == 'Quarterly' ? '3M'  : '12M'
+
+i_levelsPvt  = input.string('Levels', 'Level Labels', options=['Levels', 'Prices', 'Levels + Prices', 'None'], inline='pvt', group=group_pivot)
+i_levelsPvtP = input.string('Pivot End', '', options=['Last Bar', 'Pivot End'], inline='pvt', group=group_pivot)
+i_levelsPvtS = input.string('Small', '', options=['Small', 'Normal'], inline='pvt', group=group_pivot)
+
+i_relevant   = input.bool(false, 'Only Relevant Pivot Point Levels', group=group_pivot)
+i_histPP     = input.bool(false, 'Historical Pivot Points', group=group_pivot)
+i_extend     = input.bool(false, 'Extend Pivot Point Lines', inline='fLines', group=group_pivot)
+i_extendL    = input.string('Dashed', '', options=['Dashed', 'Dotted', 'Solid'], inline='fLines', group=group_pivot)
+
+// ---------------------------------------------------------------------------------------------- //
+
+group_fib_tool = 'Fibonacci Extention / Retracement / TimeZone Settings'
+
+i_dev_thresh = ta.atr(10) / close * 100 * input.float(3, 'Deviation', minval=0, inline='Pivots', group=group_fib_tool, tooltip=tooltip_threshold)
+i_depth      = input.int(11, '       Depth', minval=1, inline='Pivots', group=group_fib_tool)
+
+
+
+
+
+
