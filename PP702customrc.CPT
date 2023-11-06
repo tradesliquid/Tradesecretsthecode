@@ -1,0 +1,778 @@
+
+
+//lineColour = input(title="P,S,R Colour", type=input.color, defval=color.blue)
+//midlineColour = input(title="Mid Line Colour", type=input.color, defval=color.blue)
+// function to create the line and set the options, label etc.
+// inputs:// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Ross702
+
+//@version=5
+indicator('Ross702 Custom Indicator', overlay=true)
+
+rsiSource = input(title='RSI Source', defval=close)
+rsiLength = input(title='RSI Length', defval=14)
+rsiOverbought = input(title='RSI Overbought Level', defval=80)
+rsiOversold = input(title='RSI Oversold Level', defval=20)
+rsiBelow100 = input(title='RSI Trigger Below 100 EMA', defval=40)
+rsiAbove100 = input(title='RSI Trigger Above 100 EMA', defval=50)
+
+//Get RSI Value
+rsiValue = ta.rsi(rsiSource, rsiLength)
+isRsiOB = rsiValue >= rsiOverbought
+isRsiOS = rsiValue <= rsiOversold
+isRSIBuyBelow100 = rsiValue <= rsiBelow100
+isRSIBuyAbove100 = rsiValue <= rsiAbove100
+
+// Get 100 EMA Value
+ema = ta.ema(close, 100)
+
+//Price above or below 100 EMA
+below_ema = close < ema
+above_ema = close > ema
+
+//Price close above or below 10 EMA
+ema10 = ta.ema(close, 10)
+CloseAbove = close > ema10
+CloseBelow = close < ema10
+
+//Identify Hammer Candle
+body_top = math.max(open, close)
+body_bot = math.min(open, close)
+body = body_top - body_bot
+hat = high - body_top
+tail = body_bot - low
+size = high - low
+atr = ta.rma(ta.tr(true), 14)
+min_size_percent = 1
+min_body_percent = 0.50
+max_hat_percent = 0.25
+hammer_candle = tail >= body * 1.5 and hat / size <= max_hat_percent and tail > hat and low < low[1]
+tradeSignal = isRSIBuyBelow100 and hammer_candle and below_ema or isRSIBuyAbove100 and hammer_candle and above_ema
+tradeSignal2 = CloseAbove[1] and CloseBelow
+tradeSignal11 = CloseBelow[1] and CloseAbove
+
+//Identify alert condition
+tradeSignal10 = isRSIBuyBelow100 and hammer_candle and below_ema or isRSIBuyAbove100 and hammer_candle and above_ema
+
+//Identify Prior Bearish Candle
+Bear_C = open > close and high - low >= atr / 2 and high - open <= (high - low) * 0.15 and close - low <= (high - low) * 0.15 and low < low[1]
+
+// Plot signals to chart
+plotshape(hammer_candle, title='Hammer Candle Detected', location=location.abovebar, color=color.new(color.blue, 0), style=shape.triangleup, text='HC')
+plotshape(tradeSignal and hammer_candle, title='Buy Trade Signal', location=location.belowbar, color=color.new(color.green, 0), style=shape.triangleup, text='Buy')
+plotshape(isRsiOB, title='Overbought', location=location.abovebar, color=color.new(color.red, 0), style=shape.circle)
+plotshape(isRsiOS, title='Oversold', location=location.abovebar, color=color.new(color.green, 0), style=shape.circle)
+
+
+// Plot EMA's to chart
+len1 = input.int(8, minval=1, title='EMA 1 Length')
+src1 = input(close, title='EMA 1 Source')
+ema1 = ta.ema(src1, len1)
+plot(ema1, title='EMA 8', color=color.rgb(98, 98, 95, 100), linewidth=2)
+len2 = input.int(13, minval=1, title='EMA 2 Length')
+src2 = input(close, title='EMA 2 Source')
+ema2 = ta.ema(src2, len2)
+plot(ema2, title='EMA 13', color=color.new(#04ffff, 0), linewidth=2)
+len3 = input.int(34, minval=1, title='EMA 3 Length')
+src3 = input(close, title='EMA 3 Source')
+ema3 = ta.ema(src3, len3)
+plot(ema3, title='EMA 34', color=color.new(#fe04f6, 0), linewidth=2)
+len4 = input.int(100, minval=0, title='EMA 4 Length')
+src4 = input(close, title='EMA 4 Source')
+ema4 = ta.ema(src4, len4)
+plot(ema4, title='EMA 100', color=color.new(#f00404, 0), linewidth=2)
+len5 = input.int(200, minval=0, title='SMA 1 Length')
+src5 = input(close, title='SMA 1 Source')
+sma5 = ta.sma(src5, len5)
+plot(sma5, title='SMA 200', color=color.new(#048007, 0), linewidth=2)
+len6 = input.int(100, minval=0, title='SMA 2 Length')
+src6 = input(close, title='SMA 2 Source')
+sma6 = ta.sma(src6, len6)
+plot(sma6, title='SMA 100', color=color.new(#070373, 0), linewidth=2)
+
+// Send out an alert if this candle meets our conditions
+alertcondition(tradeSignal, title='Hammer RSI Signal', message='RSI & Hammer Signal Detected')
+alertcondition(tradeSignal2, title='Close Below 10 EMA', message='Price close below 10 EMA')
+alertcondition(tradeSignal10, title='Candle Pattern Alert', message='Candle Pattern Detected')
+alertcondition(tradeSignal11, title='Close Above 10 EMA', message='Price close above 10 EMA')
+
+//PIVOT Indicator Code Starts Here
+CreateLineStyle(styleText) =>
+    lineStyle = styleText == 'dotted (┈)' ? line.style_dotted : styleText == 'dashed (╌)' ? line.style_dashed : styleText == 'Hidden' ? 'Hidden' : line.style_solid
+    lineStyle
+
+lblsOnRight = input(title='Display labels on right', defval=true)
+showPrice = input(title='Show price (if not shown, hover over label to view price)', defval=true)
+
+pLineStyle = CreateLineStyle(input.string(title='P', inline='pLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+plineColour = input.color(title='', defval=color.blue, inline='pLine')
+plineWgt = input.int(title='', defval=3, minval=1, inline='pLine')
+
+r1LineStyle = CreateLineStyle(input.string(title='R1', inline='r1Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+r1lineColour = input.color(title='', defval=color.blue, inline='r1Line')
+r1lineWgt = input.int(title='', defval=1, minval=1, inline='r1Line')
+
+r2LineStyle = CreateLineStyle(input.string(title='R2', inline='r2Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+r2lineColour = input.color(title='', defval=color.blue, inline='r2Line')
+r2lineWgt = input.int(title='', defval=1, minval=1, inline='r2Line')
+
+r3LineStyle = CreateLineStyle(input.string(title='R3', inline='r3Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+r3lineColour = input.color(title='', defval=color.blue, inline='r3Line')
+r3lineWgt = input.int(title='', defval=1, minval=1, inline='r3Line')
+
+r4LineStyle = CreateLineStyle(input.string(title='R5', inline='r4Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+r4lineColour = input.color(title='', defval=color.blue, inline='r4Line')
+r4lineWgt = input.int(title='', defval=1, minval=1, inline='r4Line')
+
+r5LineStyle = CreateLineStyle(input.string(title='R4', inline='r5Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+r5lineColour = input.color(title='', defval=color.blue, inline='r5Line')
+r5lineWgt = input.int(title='', defval=1, minval=1, inline='r5Line')
+
+s1LineStyle = CreateLineStyle(input.string(title='S1', inline='s1Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+s1lineColour = input.color(title='', defval=color.blue, inline='s1Line')
+s1lineWgt = input.int(title='', defval=1, minval=1, inline='s1Line')
+
+s2LineStyle = CreateLineStyle(input.string(title='S2', inline='s2Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='solid (─)'))
+s2lineColour = input.color(title='', defval=color.blue, inline='s2Line')
+s2lineWgt = input.int(title='', defval=1, minval=1, inline='s2Line')
+
+s3LineStyle = CreateLineStyle(input.string(title='S3', inline='s3Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s3lineColour = input.color(title='', defval=color.blue, inline='s3Line')
+s3lineWgt = input.int(title='', defval=1, minval=1, inline='s3Line')
+
+s4LineStyle = CreateLineStyle(input.string(title='S4', inline='s4Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s4lineColour = input.color(title='', defval=color.blue, inline='s4Line')
+s4lineWgt = input.int(title='', defval=1, minval=1, inline='s4Line')
+
+s5LineStyle = CreateLineStyle(input.string(title='S5', inline='s5Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s5lineColour = input.color(title='', defval=color.blue, inline='s5Line')
+s5lineWgt = input.int(title='', defval=1, minval=1, inline='s5Line')
+
+r1MidLineStyle = CreateLineStyle(input.string(title='R1 Mid', inline='r1MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='dotted (┈)'))
+r1MidlineColour = input.color(title='', defval=color.blue, inline='r1MidLine')
+r1MidlineWgt = input.int(title='', defval=1, minval=1, inline='r1MidLine')
+
+r2MidLineStyle = CreateLineStyle(input.string(title='R2 Mid', inline='r2MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='dotted (┈)'))
+r2MidlineColour = input.color(title='', defval=color.blue, inline='r2MidLine')
+r2MidlineWgt = input.int(title='', defval=1, minval=1, inline='r2MidLine')
+
+r3MidLineStyle = CreateLineStyle(input.string(title='R3 Mid', inline='r3MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r3MidlineColour = input.color(title='', defval=color.blue, inline='r3MidLine')
+r3MidlineWgt = input.int(title='', defval=1, minval=1, inline='r3MidLine')
+
+r4MidLineStyle = CreateLineStyle(input.string(title='R4 Mid', inline='r4MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r4MidlineColour = input.color(title='', defval=color.blue, inline='r4MidLine')
+r4MidlineWgt = input.int(title='', defval=1, minval=1, inline='r4MidLine')
+
+r5MidLineStyle = CreateLineStyle(input.string(title='R5 Mid', inline='r5MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r5MidlineColour = input.color(title='', defval=color.blue, inline='r5MidLine')
+r5MidlineWgt = input.int(title='', defval=1, minval=1, inline='r5MidLine')
+
+s1MidLineStyle = CreateLineStyle(input.string(title='S1 Mid', inline='s1MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='dotted (┈)'))
+s1MidlineColour = input.color(title='', defval=color.blue, inline='s1MidLine')
+s1MidlineWgt = input.int(title='', defval=1, minval=1, inline='s1MidLine')
+
+s2MidLineStyle = CreateLineStyle(input.string(title='S2 Mid', inline='s2MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s2MidlineColour = input.color(title='', defval=color.blue, inline='s2MidLine')
+s2MidlineWgt = input.int(title='', defval=1, minval=1, inline='s2MidLine')
+
+s3MidLineStyle = CreateLineStyle(input.string(title='S3 Mid', inline='s3MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s3MidlineColour = input.color(title='', defval=color.blue, inline='s3MidLine')
+s3MidlineWgt = input.int(title='', defval=1, minval=1, inline='s3MidLine')
+
+s4MidLineStyle = CreateLineStyle(input.string(title='S4 Mid', inline='s4MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s4MidlineColour = input.color(title='', defval=color.blue, inline='s4MidLine')
+s4MidlineWgt = input.int(title='', defval=1, minval=1, inline='s4MidLine')
+
+s5MidLineStyle = CreateLineStyle(input.string(title='S5 Mid', inline='s5MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s5MidlineColour = input.color(title='', defval=color.blue, inline='s5MidLine')
+s5MidlineWgt = input.int(title='', defval=1, minval=1, inline='s5MidLine')
+
+// lineToSet - a reference to the line object to work with
+// level - the price level (y axis) at which to draw the horizontal line
+// width - a number used to set the thickness of the line 
+// colour - the colour of the line - use color.<colour> to set this
+// style - the style of the eg line.style_dotted, line.style_solid etc
+// Returns the line that was created
+CreateTheLine(lineToSet, level, width, colour, style) =>  //, labelText)=>
+    // create the line
+    line.set_x2(lineToSet, bar_index)
+    line.set_extend(lineToSet, extend.none)
+    // return the line
+    line.new(x1=bar_index, y1=level, x2=bar_index, y2=level, width=width, extend=extend.right, color=colour, style=style)
+    //lineToSet 
+
+CreateTheLabel(level, colour, style, labelText) =>
+    // create the label
+    lblText = labelText
+    tooltip = labelText + ' (' + str.tostring(level) + ')'
+
+    if showPrice
+        lblText := tooltip  // include the price in the label
+        lblText
+
+    label.new(bar_index, level, lblText, style=label.style_none, textcolor=colour, textalign=text.align_right, tooltip=tooltip)
+
+// TF = timeframe
+//higherTF = (timeframe.isintraday and timeframe.multiplier < 30) ? input("D", type=input.resolution)  : (timeframe.isintraday and timeframe.multiplier >=30) ? input("W", type=input.resolution) : input("M", type=input.resolution)
+higherTF = timeframe.isintraday and timeframe.multiplier < 30 ? 'D' : timeframe.isintraday and timeframe.multiplier >= 30 ? 'W' : 'M'
+//higherTF = input("D", type=input.resolution)
+// get the high, low, open, close of the higher (1 day) timeframe
+prevCloseHTF = request.security(syminfo.tickerid, higherTF, close[1], lookahead=barmerge.lookahead_on)
+prevOpenHTF = request.security(syminfo.tickerid, higherTF, open[1], lookahead=barmerge.lookahead_on)
+prevHighHTF = request.security(syminfo.tickerid, higherTF, high[1], lookahead=barmerge.lookahead_on)
+prevLowHTF = request.security(syminfo.tickerid, higherTF, low[1], lookahead=barmerge.lookahead_on)
+// pivot level
+pLevel = math.round_to_mintick((prevHighHTF + prevLowHTF + prevCloseHTF) / 3)
+r1Level = math.round_to_mintick(pLevel * 2 - prevLowHTF)
+s1Level = math.round_to_mintick(pLevel * 2 - prevHighHTF)
+r1MidLevel = math.round_to_mintick((pLevel + r1Level) / 2)
+s1MidLevel = math.round_to_mintick((pLevel + s1Level) / 2)
+// calc the range = prev day high - prev day Low
+range_1 = math.round_to_mintick(prevHighHTF - prevLowHTF)
+// levels for the additional Resistance/support levels - calculated as (plevel +/- range*N) where N = Support Level -1
+r2Level = pLevel + range_1
+s2Level = pLevel - range_1
+r2MidLevel = math.round_to_mintick((r2Level + r1Level) / 2)
+s2MidLevel = math.round_to_mintick((s2Level + s1Level) / 2)
+r3Level = math.round_to_mintick(r1Level + range_1)
+s3Level = math.round_to_mintick(s1Level - range_1)
+r3MidLevel = math.round_to_mintick((r3Level + r2Level) / 2)
+s3MidLevel = math.round_to_mintick((s3Level + s2Level) / 2)
+r4Level = math.round_to_mintick(r2Level + range_1)
+s4Level = math.round_to_mintick(s2Level - range_1)
+r4MidLevel = math.round_to_mintick((r4Level + r3Level) / 2)
+s4MidLevel = math.round_to_mintick((s4Level + s3Level) / 2)
+r5Level = math.round_to_mintick(r3Level + range_1)
+s5Level = math.round_to_mintick(s3Level - range_1)
+r5MidLevel = math.round_to_mintick((r5Level + r4Level) / 2)
+s5MidLevel = math.round_to_mintick((s5Level + s4Level) / 2)
+var line pLine = na
+var line r1Line = na
+var line r2Line = na
+var line r3Line = na
+var line r4Line = na
+var line r5Line = na
+var line s1Line = na
+var line s2Line = na
+var line s3Line = na
+var line s4Line = na
+var line s5Line = na
+var line r1MidLine = na
+var line r2MidLine = na
+var line r3MidLine = na
+var line r4MidLine = na
+var line r5MidLine = na
+var line s1MidLine = na
+var line s2MidLine = na
+var line s3MidLine = na
+var line s4MidLine = na
+var line s5MidLine = na
+var label pLabel = na
+var label r1Label = na
+var label r2Label = na
+var label r3Label = na
+var label r4Label = na
+var label r5Label = na
+var label r1MidLabel = na
+var label r2MidLabel = na
+var label r3MidLabel = na
+var label r4MidLabel = na
+var label r5MidLabel = na
+var label s1Label = na
+var label s2Label = na
+var label s3Label = na
+var label s4Label = na
+var label s5Label = na
+var label s1MidLabel = na
+var label s2MidLabel = na
+var label s3MidLabel = na
+var label s4MidLabel = na
+var label s5MidLabel = na
+if pLevel[1] != pLevel
+    if pLineStyle != 'Hidden'
+        pLine := CreateTheLine(pLine, pLevel, plineWgt, plineColour, pLineStyle)  //, "P (" + tostring(pLevel) + ")")
+        pLabel := CreateTheLabel(level=pLevel, colour=plineColour, style=label.style_none, labelText='P')  // (" + tostring(pLevel) + ")")
+        pLabel
+        //pLabel := label.new(bar_index, pLevel, "PTest", style=label.style_none)
+    if r1LineStyle != 'Hidden'
+        r1Line := CreateTheLine(r1Line, r1Level, r1lineWgt, r1lineColour, r1LineStyle)  //, "R1 (" + tostring(r1Level) + ")")
+        r1Label := CreateTheLabel(level=r1Level, colour=r1lineColour, style=label.style_none, labelText='R1')  // (" + tostring(r1Level) + ")")
+        r1Label
+    if r2LineStyle != 'Hidden'
+        r2Line := CreateTheLine(r2Line, r2Level, r2lineWgt, r2lineColour, r2LineStyle)  //, "R2 (" + tostring(r2Level) + ")")
+        r2Label := CreateTheLabel(level=r2Level, colour=r2lineColour, style=label.style_none, labelText='R2')  // (" + tostring(r2Level) + ")")
+        r2Label
+    if r3LineStyle != 'Hidden'
+        r3Line := CreateTheLine(r3Line, r3Level, r3lineWgt, r3lineColour, r3LineStyle)  //, "R3 (" + tostring(r3Level) + ")")
+        r3Label := CreateTheLabel(level=r3Level, colour=r3lineColour, style=label.style_none, labelText='R3')  // (" + tostring(r3Level) + ")")
+        r3Label
+    if r4LineStyle != 'Hidden'
+        r4Line := CreateTheLine(r4Line, r4Level, r4lineWgt, r4lineColour, r4LineStyle)  //, "r4 (" + tostring(r4Level) + ")")
+        r4Label := CreateTheLabel(level=r4Level, colour=r4lineColour, style=label.style_none, labelText='R4')  // (" + tostring(r5Level) + ")")
+        r4Label
+    if r5LineStyle != 'Hidden'
+        r5Line := CreateTheLine(r5Line, r5Level, r5lineWgt, r5lineColour, r5LineStyle)  //, "r5 (" + tostring(r5Level) + ")")
+        r5Label := CreateTheLabel(level=r5Level, colour=r5lineColour, style=label.style_none, labelText='R5')  // (" + tostring(r5Level) + ")")
+        r5Label
+    if s1LineStyle != 'Hidden'
+        s1Line := CreateTheLine(s1Line, s1Level, s1lineWgt, s1lineColour, s1LineStyle)  //, "S1 (" + tostring(s1Level) + ")")
+        s1Label := CreateTheLabel(level=s1Level, colour=s1lineColour, style=label.style_none, labelText='S1')  // (" + tostring(s1Level) + ")")
+        s1Label
+    if s2LineStyle != 'Hidden'
+        s2Line := CreateTheLine(s2Line, s2Level, s2lineWgt, s2lineColour, s2LineStyle)  //, "S2 (" + tostring(s2Level) + ")")
+        s2Label := CreateTheLabel(level=s2Level, colour=s2lineColour, style=label.style_none, labelText='S2')  // (" + tostring(s2Level) + ")")
+        s2Label
+    if s3LineStyle != 'Hidden'
+        s3Line := CreateTheLine(s3Line, s3Level, s3lineWgt, s3lineColour, s3LineStyle)  //, "S3 (" + tostring(s3Level) + ")")
+        s3Label := CreateTheLabel(level=s3Level, colour=s3lineColour, style=label.style_none, labelText='S3')  // (" + tostring(s3Level) + ")")
+        s3Label
+    if s4LineStyle != 'Hidden'
+        s4Line := CreateTheLine(s4Line, s4Level, s4lineWgt, s4lineColour, s4LineStyle)  //, "s4 (" + tostring(s4Level) + ")")
+        s4Label := CreateTheLabel(level=s4Level, colour=s4lineColour, style=label.style_none, labelText='S4')  // (" + tostring(s4Level) + ")")
+        s4Label
+    if s5LineStyle != 'Hidden'
+        s5Line := CreateTheLine(s5Line, s5Level, s5lineWgt, s5lineColour, s5LineStyle)  //, "s5 (" + tostring(s5Level) + ")")
+        s5Label := CreateTheLabel(level=s5Level, colour=s5lineColour, style=label.style_none, labelText='S5')  // (" + tostring(s3Level) + ")")
+        s5Label
+    if r1MidLineStyle != 'Hidden'
+        r1MidLine := CreateTheLine(r1MidLine, r1MidLevel, r1MidlineWgt, r1MidlineColour, r1MidLineStyle)  //, "MID (" + tostring(r1MidLevel) + ")")
+        r1MidLabel := CreateTheLabel(level=r1MidLevel, colour=r1MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(r1MidLevel) + ")")
+        r1MidLabel
+    if r2MidLineStyle != 'Hidden'
+        r2MidLine := CreateTheLine(r2MidLine, r2MidLevel, r2MidlineWgt, r2MidlineColour, r2MidLineStyle)  //, "MID (" + tostring(r2MidLevel) + ")")
+        r2MidLabel := CreateTheLabel(level=r2MidLevel, colour=r2MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(r2MidLevel) + ")")
+        r2MidLabel
+    if r3MidLineStyle != 'Hidden'
+        r3MidLine := CreateTheLine(r3MidLine, r3MidLevel, r3MidlineWgt, r3MidlineColour, r3MidLineStyle)  //, "MID (" + tostring(r3MidLevel) + ")")
+        r3MidLabel := CreateTheLabel(level=r3MidLevel, colour=r3MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(r3MidLevel) + ")")
+        r3MidLabel
+    if r4MidLineStyle != 'Hidden'
+        r4MidLine := CreateTheLine(r4MidLine, r4MidLevel, r4MidlineWgt, r4MidlineColour, r4MidLineStyle)  //, "MID (" + tostring(r4MidLevel) + ")")
+        r4MidLabel := CreateTheLabel(level=r4MidLevel, colour=r4MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(r4MidLevel) + ")")
+        r4MidLabel
+    if r5MidLineStyle != 'Hidden'
+        r5MidLine := CreateTheLine(r5MidLine, r5MidLevel, r5MidlineWgt, r5MidlineColour, r5MidLineStyle)  //, "MID (" + tostring(r5MidLevel) + ")")
+        r5MidLabel := CreateTheLabel(level=r5MidLevel, colour=r5MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(r3MidLevel) + ")")
+        r5MidLabel
+    if s1MidLineStyle != 'Hidden'
+        s1MidLine := CreateTheLine(s1MidLine, s1MidLevel, s1MidlineWgt, s1MidlineColour, s1MidLineStyle)  //, "MID (" + tostring(s1MidLevel) + ")")
+        s1MidLabel := CreateTheLabel(level=s1MidLevel, colour=s1MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(s1MidLevel) + ")")
+        s1MidLabel
+    if s2MidLineStyle != 'Hidden'
+        s2MidLine := CreateTheLine(s2MidLine, s2MidLevel, s2MidlineWgt, s2MidlineColour, s2MidLineStyle)  //, "MID (" + tostring(s2MidLevel) + ")")
+        s2MidLabel := CreateTheLabel(level=s2MidLevel, colour=s2MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(s2MidLevel) + ")")
+        s2MidLabel
+    if s3MidLineStyle != 'Hidden'
+        s3MidLine := CreateTheLine(s3MidLine, s3MidLevel, s3MidlineWgt, s3MidlineColour, s3MidLineStyle)  //, "MID (" + tostring(s3MidLevel) + ")")
+        s3MidLabel := CreateTheLabel(level=s3MidLevel, colour=s3MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(s3MidLevel) + ")")
+        s3MidLabel
+    if s4MidLineStyle != 'Hidden'
+        s4MidLine := CreateTheLine(s4MidLine, s4MidLevel, s4MidlineWgt, s4MidlineColour, s4MidLineStyle)  //, "MID (" + tostring(s4MidLevel) + ")")
+        s4MidLabel := CreateTheLabel(level=s4MidLevel, colour=s4MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(s4MidLevel) + ")")
+        s4MidLabel
+    if s5MidLineStyle != 'Hidden'
+        s5MidLine := CreateTheLine(s5MidLine, s5MidLevel, s5MidlineWgt, s5MidlineColour, s5MidLineStyle)  //, "MID (" + tostring(s5MidLevel) + ")")
+        s5MidLabel := CreateTheLabel(level=s5MidLevel, colour=s5MidlineColour, style=label.style_none, labelText='MID')  // (" + tostring(s3MidLevel) + ")")
+        s5MidLabel
+
+if not na(pLine) and line.get_x2(pLine) != bar_index
+    line.set_x2(r1Line, bar_index)
+    line.set_x2(pLine, bar_index)
+    line.set_x2(s1Line, bar_index)
+    line.set_x2(s1MidLine, bar_index)
+    line.set_x2(r1MidLine, bar_index)
+    line.set_x2(r2Line, bar_index)
+    line.set_x2(r3Line, bar_index)
+    line.set_x2(r4Line, bar_index)
+    line.set_x2(r5Line, bar_index)
+    line.set_x2(s2Line, bar_index)
+    line.set_x2(s3Line, bar_index)
+    line.set_x2(s4Line, bar_index)
+    line.set_x2(s5Line, bar_index)
+    line.set_x2(r2MidLine, bar_index)
+    line.set_x2(r3MidLine, bar_index)
+    line.set_x2(r4MidLine, bar_index)
+    line.set_x2(r5MidLine, bar_index)
+    line.set_x2(s2MidLine, bar_index)
+    line.set_x2(s3MidLine, bar_index)
+    line.set_x2(s4MidLine, bar_index)
+    line.set_x2(s5MidLine, bar_index)
+    if lblsOnRight  // if labels should be displayed on right, move to the location of the last bar.
+        label.set_x(pLabel, bar_index)
+        label.set_x(r1Label, bar_index)
+        label.set_x(r2Label, bar_index)
+        label.set_x(r3Label, bar_index)
+        label.set_x(r4Label, bar_index)
+        label.set_x(r5Label, bar_index)
+        label.set_x(r1MidLabel, bar_index)
+        label.set_x(r2MidLabel, bar_index)
+        label.set_x(r3MidLabel, bar_index)
+        label.set_x(r4MidLabel, bar_index)
+        label.set_x(r5MidLabel, bar_index)
+        label.set_x(s1Label, bar_index)
+        label.set_x(s2Label, bar_index)
+        label.set_x(s3Label, bar_index)
+        label.set_x(s4Label, bar_index)
+        label.set_x(s5Label, bar_index)
+        label.set_x(s1MidLabel, bar_index)
+        label.set_x(s2MidLabel, bar_index)
+        label.set_x(s3MidLabel, bar_index)
+        label.set_x(s4MidLabel, bar_index)
+        label.set_x(s5MidLabel, bar_index)
+//PIVOT Indicator for Highter Code Starts Here
+//PIVOT Indicator Code Starts Here
+
+CreateLineStyleHT(styleText) =>
+    lineStyleHT = styleText == 'dotted (┈)' ? line.style_dotted : styleText == 'dashed (╌)' ? line.style_dashed : styleText == 'Hidden' ? 'Hidden' : line.style_solid
+    lineStyleHT
+
+lblsOnRightHT = input(title='Display labels on right', defval=false)
+showPriceHT = input(title='Show price (if not shown, hover over label to view price)', defval=true)
+
+pLineStyleHT = CreateLineStyleHT(input.string(title='HT P', inline='pLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+plineColourHT = input.color(title='', defval=color.green, inline='pLine')
+plineWgtHT = input.int(title='', defval=1, minval=1, inline='pLine')
+
+r1LineStyleHT = CreateLineStyleHT(input.string(title='HT R1', inline='r1Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r1lineColourHT = input.color(title='', defval=color.green, inline='r1Line')
+r1lineWgtHT = input.int(title='', defval=1, minval=1, inline='r1Line')
+
+r2LineStyleHT = CreateLineStyleHT(input.string(title='HT R2', inline='r2Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r2lineColourHT = input.color(title='', defval=color.green, inline='r2Line')
+r2lineWgtHT = input.int(title='', defval=1, minval=1, inline='r2Line')
+
+r3LineStyleHT = CreateLineStyleHT(input.string(title='HT R3', inline='r3Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r3lineColourHT = input.color(title='', defval=color.green, inline='r3Line')
+r3lineWgtHT = input.int(title='', defval=1, minval=1, inline='r3Line')
+
+r4LineStyleHT = CreateLineStyleHT(input.string(title='HT R5', inline='r4Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r4lineColourHT = input.color(title='', defval=color.green, inline='r4Line')
+r4lineWgtHT = input.int(title='', defval=1, minval=1, inline='r4Line')
+
+r5LineStyleHT = CreateLineStyleHT(input.string(title='HT R4', inline='r5Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r5lineColourHT = input.color(title='', defval=color.green, inline='r5Line')
+r5lineWgtHT = input.int(title='', defval=1, minval=1, inline='r5Line')
+
+s1LineStyleHT = CreateLineStyleHT(input.string(title='HT S1', inline='s1Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s1lineColourHT = input.color(title='', defval=color.green, inline='s1Line')
+s1lineWgtHT = input.int(title='', defval=1, minval=1, inline='s1Line')
+
+s2LineStyleHT = CreateLineStyleHT(input.string(title='HT S2', inline='s2Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s2lineColourHT = input.color(title='', defval=color.green, inline='s2Line')
+s2lineWgtHT = input.int(title='', defval=1, minval=1, inline='s2Line')
+
+s3LineStyleHT = CreateLineStyleHT(input.string(title='HT S3', inline='s3Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s3lineColourHT = input.color(title='', defval=color.green, inline='s3Line')
+s3lineWgtHT = input.int(title='', defval=1, minval=1, inline='s3Line')
+
+s4LineStyleHT = CreateLineStyleHT(input.string(title='HT S4', inline='s4Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s4lineColourHT = input.color(title='', defval=color.green, inline='s4Line')
+s4lineWgtHT = input.int(title='', defval=1, minval=1, inline='s4Line')
+
+s5LineStyleHT = CreateLineStyleHT(input.string(title='HT S5', inline='s5Line', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s5lineColourHT = input.color(title='', defval=color.green, inline='s5Line')
+s5lineWgtHT = input.int(title='', defval=1, minval=1, inline='s5Line')
+
+r1MidLineStyleHT = CreateLineStyleHT(input.string(title='HT R1 Mid', inline='r1MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r1MidlineColourHT = input.color(title='', defval=color.green, inline='r1MidLine')
+r1MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='r1MidLine')
+
+r2MidLineStyleHT = CreateLineStyleHT(input.string(title='HT R2 Mid', inline='r2MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r2MidlineColourHT = input.color(title='', defval=color.green, inline='r2MidLine')
+r2MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='r2MidLine')
+
+r3MidLineStyleHT = CreateLineStyleHT(input.string(title='HT R3 Mid', inline='r3MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r3MidlineColourHT = input.color(title='', defval=color.green, inline='r3MidLine')
+r3MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='r3MidLine')
+
+r4MidLineStyleHT = CreateLineStyleHT(input.string(title='HT R4 Mid', inline='r4MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r4MidlineColourHT = input.color(title='', defval=color.green, inline='r4MidLine')
+r4MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='r4MidLine')
+
+r5MidLineStyleHT = CreateLineStyleHT(input.string(title='HT R5 Mid', inline='r5MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+r5MidlineColourHT = input.color(title='', defval=color.green, inline='r5MidLine')
+r5MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='r5MidLine')
+
+s1MidLineStyleHT = CreateLineStyleHT(input.string(title='HT S1 Mid', inline='s1MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s1MidlineColourHT = input.color(title='', defval=color.green, inline='s1MidLine')
+s1MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='s1MidLine')
+
+s2MidLineStyleHT = CreateLineStyleHT(input.string(title='HT S2 Mid', inline='s2MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s2MidlineColourHT = input.color(title='', defval=color.green, inline='s2MidLine')
+s2MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='s2MidLine')
+
+s3MidLineStyleHT = CreateLineStyleHT(input.string(title='HT S3 Mid', inline='s3MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s3MidlineColourHT = input.color(title='', defval=color.green, inline='s3MidLine')
+s3MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='s3MidLine')
+
+s4MidLineStyleHT = CreateLineStyleHT(input.string(title='HT S4 Mid', inline='s4MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s4MidlineColourHT = input.color(title='', defval=color.green, inline='s4MidLine')
+s4MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='s4MidLine')
+
+s5MidLineStyleHT = CreateLineStyleHT(input.string(title='HT S5 Mid', inline='s5MidLine', options=['Hidden', 'solid (─)', 'dotted (┈)', 'dashed (╌)'], defval='Hidden'))
+s5MidlineColourHT = input.color(title='', defval=color.green, inline='s5MidLine')
+s5MidlineWgtHT = input.int(title='', defval=1, minval=1, inline='s5MidLine')
+
+//lineColour = input(title="P,S,R Colour", type=input.color, defval=color.blue)
+//midlineColour = input(title="Mid Line Colour", type=input.color, defval=color.blue)
+// function to create the line and set the options, label etc.
+// inputs:
+// lineToSet - a reference to the line object to work with
+// level - the price level (y axis) at which to draw the horizontal line
+// width - a number used to set the thickness of the line 
+// colour - the colour of the line - use color.<colour> to set this
+// style - the style of the eg line.style_dotted, line.style_solid etc
+// Returns the line that was created
+CreateTheLineHT(lineToSetHT, levelHT, widthHT, colourHT, styleHT) =>  //, labelText)=>
+    // create the line
+    line.set_x2(lineToSetHT, bar_index)
+    line.set_extend(lineToSetHT, extend.none)
+    // return the line
+    line.new(x1=bar_index, y1=levelHT, x2=bar_index, y2=levelHT, width=widthHT, extend=extend.right, color=colourHT, style=styleHT)
+    //lineToSet 
+
+CreateTheLabelHT(levelHT, colourHT, styleHT, labelTextHT) =>
+    // create the label
+    lblTextHT = labelTextHT
+    tooltipHT = labelTextHT + ' (' + str.tostring(levelHT) + ')'
+
+    if showPriceHT
+        lblTextHT := tooltipHT  // include the price in the label
+        lblTextHT
+
+    label.new(bar_index, levelHT, lblTextHT, style=label.style_none, textcolor=colourHT, textalign=text.align_right, tooltip=tooltipHT)
+
+// TF = timeframe
+higherTFHT = (timeframe.isintraday and timeframe.multiplier < 30) ? input.timeframe("D", "Resolution", options=['D','W','M'])  : na
+// get the high, low, open, close of the higher (1 day) timeframe
+prevCloseHTFHT = request.security(syminfo.tickerid, higherTFHT, close[1], lookahead=barmerge.lookahead_on)
+prevOpenHTFHT = request.security(syminfo.tickerid, higherTFHT, open[1], lookahead=barmerge.lookahead_on)
+prevHighHTFHT = request.security(syminfo.tickerid, higherTFHT, high[1], lookahead=barmerge.lookahead_on)
+prevLowHTFHT = request.security(syminfo.tickerid, higherTFHT, low[1], lookahead=barmerge.lookahead_on)
+// pivot level
+pLevelHT = math.round_to_mintick((prevHighHTFHT + prevLowHTFHT + prevCloseHTFHT) / 3)
+r1LevelHT = math.round_to_mintick(pLevelHT * 2 - prevLowHTFHT)
+s1LevelHT = math.round_to_mintick(pLevelHT * 2 - prevHighHTFHT)
+r1MidLevelHT = math.round_to_mintick((pLevelHT + r1LevelHT) / 2)
+s1MidLevelHT = math.round_to_mintick((pLevelHT + s1LevelHT) / 2)
+// calc the range = prev day high - prev day Low
+range_1HT = math.round_to_mintick(prevHighHTFHT - prevLowHTFHT)
+// levels for the additional Resistance/support levels - calculated as (plevel +/- range*N) where N = Support Level -1
+r2LevelHT = pLevelHT + range_1HT
+s2LevelHT = pLevelHT - range_1HT
+r2MidLevelHT = math.round_to_mintick((r2LevelHT + r1LevelHT) / 2)
+s2MidLevelHT = math.round_to_mintick((s2LevelHT + s1LevelHT) / 2)
+r3LevelHT = math.round_to_mintick(r1LevelHT + range_1HT)
+s3LevelHT = math.round_to_mintick(s1LevelHT - range_1HT)
+r3MidLevelHT = math.round_to_mintick((r3LevelHT + r2LevelHT) / 2)
+s3MidLevelHT = math.round_to_mintick((s3LevelHT + s2LevelHT) / 2)
+r4LevelHT = math.round_to_mintick(r2LevelHT + range_1HT)
+s4LevelHT = math.round_to_mintick(s2LevelHT - range_1HT)
+r4MidLevelHT = math.round_to_mintick((r4LevelHT + r3LevelHT) / 2)
+s4MidLevelHT = math.round_to_mintick((s4LevelHT + s3LevelHT) / 2)
+r5LevelHT = math.round_to_mintick(r3LevelHT + range_1HT)
+s5LevelHT = math.round_to_mintick(s3LevelHT - range_1HT)
+r5MidLevelHT = math.round_to_mintick((r5LevelHT + r4LevelHT) / 2)
+s5MidLevelHT = math.round_to_mintick((s5LevelHT + s4LevelHT) / 2)
+var line pLineHT = na
+var line r1LineHT = na
+var line r2LineHT = na
+var line r3LineHT = na
+var line r4LineHT = na
+var line r5LineHT = na
+var line s1LineHT = na
+var line s2LineHT = na
+var line s3LineHT = na
+var line s4LineHT = na
+var line s5LineHT = na
+var line r1MidLineHT = na
+var line r2MidLineHT = na
+var line r3MidLineHT = na
+var line r4MidLineHT = na
+var line r5MidLineHT = na
+var line s1MidLineHT = na
+var line s2MidLineHT = na
+var line s3MidLineHT = na
+var line s4MidLineHT = na
+var line s5MidLineHT = na
+var label pLabelHT = na
+var label r1LabelHT = na
+var label r2LabelHT = na
+var label r3LabelHT = na
+var label r4LabelHT = na
+var label r5LabelHT = na
+var label r1MidLabelHT = na
+var label r2MidLabelHT = na
+var label r3MidLabelHT = na
+var label r4MidLabelHT = na
+var label r5MidLabelHT = na
+var label s1LabelHT = na
+var label s2LabelHT = na
+var label s3LabelHT = na
+var label s4LabelHT = na
+var label s5LabelHT = na
+var label s1MidLabelHT = na
+var label s2MidLabelHT = na
+var label s3MidLabelHT = na
+var label s4MidLabelHT = na
+var label s5MidLabelHT = na
+if pLevelHT[1] != pLevelHT
+    if pLineStyleHT != 'Hidden'
+        pLineHT := CreateTheLineHT(pLineHT, pLevelHT, plineWgtHT, plineColourHT, pLineStyleHT)  //, "P (" + tostring(pLevel) + ")")
+        pLabelHT := CreateTheLabelHT(levelHT=pLevelHT, colourHT=plineColourHT, styleHT=label.style_none, labelTextHT='P')  // (" + tostring(pLevel) + ")")
+        pLabelHT
+        //pLabel := label.new(bar_index, pLevel, "PTest", style=label.style_none)
+    if r1LineStyleHT != 'Hidden'
+        r1LineHT := CreateTheLineHT(r1LineHT, r1LevelHT, r1lineWgtHT, r1lineColourHT, r1LineStyleHT)  //, "R1 (" + tostring(r1Level) + ")")
+        r1LabelHT := CreateTheLabelHT(levelHT=r1LevelHT, colourHT=r1lineColourHT, styleHT=label.style_none, labelTextHT='R1')  // (" + tostring(r1Level) + ")")
+        r1LabelHT
+    if r2LineStyleHT != 'Hidden'
+        r2LineHT := CreateTheLineHT(r2LineHT, r2LevelHT, r2lineWgtHT, r2lineColourHT, r2LineStyleHT)  //, "R2 (" + tostring(r2Level) + ")")
+        r2LabelHT := CreateTheLabelHT(levelHT=r2LevelHT, colourHT=r2lineColourHT, styleHT=label.style_none, labelTextHT='R2')  // (" + tostring(r2Level) + ")")
+        r2LabelHT
+    if r3LineStyleHT != 'Hidden'
+        r3LineHT := CreateTheLineHT(r3LineHT, r3LevelHT, r3lineWgtHT, r3lineColourHT, r3LineStyleHT)  //, "R3 (" + tostring(r3Level) + ")")
+        r3LabelHT := CreateTheLabelHT(levelHT=r3LevelHT, colourHT=r3lineColourHT, styleHT=label.style_none, labelTextHT='R3')  // (" + tostring(r3Level) + ")")
+        r3LabelHT
+    if r4LineStyleHT != 'Hidden'
+        r4LineHT := CreateTheLineHT(r4LineHT, r4LevelHT, r4lineWgtHT, r4lineColourHT, r4LineStyleHT)  //, "r4 (" + tostring(r4Level) + ")")
+        r4LabelHT := CreateTheLabelHT(levelHT=r4LevelHT, colourHT=r4lineColourHT, styleHT=label.style_none, labelTextHT='R4')  // (" + tostring(r5Level) + ")")
+        r4LabelHT
+    if r5LineStyleHT != 'Hidden'
+        r5LineHT := CreateTheLineHT(r5LineHT, r5LevelHT, r5lineWgtHT, r5lineColourHT, r5LineStyleHT)  //, "r5 (" + tostring(r5Level) + ")")
+        r5LabelHT := CreateTheLabelHT(levelHT=r5LevelHT, colourHT=r5lineColourHT, styleHT=label.style_none, labelTextHT='R5')  // (" + tostring(r5Level) + ")")
+        r5LabelHT
+    if s1LineStyleHT != 'Hidden'
+        s1LineHT := CreateTheLineHT(s1LineHT, s1LevelHT, s1lineWgtHT, s1lineColourHT, s1LineStyleHT)  //, "S1 (" + tostring(s1Level) + ")")
+        s1LabelHT := CreateTheLabelHT(levelHT=s1LevelHT, colourHT=s1lineColourHT, styleHT=label.style_none, labelTextHT='S1')  // (" + tostring(s1Level) + ")")
+        s1LabelHT
+    if s2LineStyleHT != 'Hidden'
+        s2LineHT := CreateTheLineHT(s2LineHT, s2LevelHT, s2lineWgtHT, s2lineColourHT, s2LineStyleHT)  //, "S2 (" + tostring(s2Level) + ")")
+        s2LabelHT := CreateTheLabelHT(levelHT=s2LevelHT, colourHT=s2lineColourHT, styleHT=label.style_none, labelTextHT='S2')  // (" + tostring(s2Level) + ")")
+        s2LabelHT
+    if s3LineStyleHT != 'Hidden'
+        s3LineHT := CreateTheLineHT(s3LineHT, s3LevelHT, s3lineWgtHT, s3lineColourHT, s3LineStyleHT)  //, "S3 (" + tostring(s3Level) + ")")
+        s3LabelHT := CreateTheLabelHT(levelHT=s3LevelHT, colourHT=s3lineColourHT, styleHT=label.style_none, labelTextHT='S3')  // (" + tostring(s3Level) + ")")
+        s3LabelHT
+    if s4LineStyleHT != 'Hidden'
+        s4LineHT := CreateTheLineHT(s4LineHT, s4LevelHT, s4lineWgtHT, s4lineColourHT, s4LineStyleHT)  //, "s4 (" + tostring(s4Level) + ")")
+        s4LabelHT := CreateTheLabelHT(levelHT=s4LevelHT, colourHT=s4lineColourHT, styleHT=label.style_none, labelTextHT='S4')  // (" + tostring(s4Level) + ")")
+        s4LabelHT
+    if s5LineStyleHT != 'Hidden'
+        s5LineHT := CreateTheLineHT(s5LineHT, s5LevelHT, s5lineWgtHT, s5lineColourHT, s5LineStyleHT)  //, "s5 (" + tostring(s5Level) + ")")
+        s5LabelHT := CreateTheLabelHT(levelHT=s5LevelHT, colourHT=s5lineColourHT, styleHT=label.style_none, labelTextHT='S5')  // (" + tostring(s3Level) + ")")
+        s5LabelHT
+    if r1MidLineStyleHT != 'Hidden'
+        r1MidLineHT := CreateTheLineHT(r1MidLineHT, r1MidLevelHT, r1MidlineWgtHT, r1MidlineColourHT, r1MidLineStyleHT)  //, "MID (" + tostring(r1MidLevel) + ")")
+        r1MidLabelHT := CreateTheLabelHT(levelHT=r1MidLevelHT, colourHT=r1MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(r1MidLevel) + ")")
+        r1MidLabelHT
+    if r2MidLineStyleHT != 'Hidden'
+        r2MidLineHT := CreateTheLineHT(r2MidLineHT, r2MidLevelHT, r2MidlineWgtHT, r2MidlineColourHT, r2MidLineStyleHT)  //, "MID (" + tostring(r2MidLevel) + ")")
+        r2MidLabelHT := CreateTheLabelHT(levelHT=r2MidLevelHT, colourHT=r2MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(r2MidLevel) + ")")
+        r2MidLabelHT
+    if r3MidLineStyleHT != 'Hidden'
+        r3MidLineHT := CreateTheLineHT(r3MidLineHT, r3MidLevelHT, r3MidlineWgtHT, r3MidlineColourHT, r3MidLineStyleHT)  //, "MID (" + tostring(r3MidLevel) + ")")
+        r3MidLabelHT := CreateTheLabelHT(levelHT=r3MidLevelHT, colourHT=r3MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(r3MidLevel) + ")")
+        r3MidLabelHT
+    if r4MidLineStyleHT != 'Hidden'
+        r4MidLineHT := CreateTheLineHT(r4MidLineHT, r4MidLevelHT, r4MidlineWgtHT, r4MidlineColourHT, r4MidLineStyleHT)  //, "MID (" + tostring(r4MidLevel) + ")")
+        r4MidLabelHT := CreateTheLabelHT(levelHT=r4MidLevelHT, colourHT=r4MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(r4MidLevel) + ")")
+        r4MidLabelHT
+    if r5MidLineStyleHT != 'Hidden'
+        r5MidLineHT := CreateTheLineHT(r5MidLineHT, r5MidLevelHT, r5MidlineWgtHT, r5MidlineColourHT, r5MidLineStyleHT)  //, "MID (" + tostring(r5MidLevel) + ")")
+        r5MidLabelHT := CreateTheLabelHT(levelHT=r5MidLevelHT, colourHT=r5MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(r3MidLevel) + ")")
+        r5MidLabelHT
+    if s1MidLineStyleHT != 'Hidden'
+        s1MidLineHT := CreateTheLineHT(s1MidLineHT, s1MidLevelHT, s1MidlineWgtHT, s1MidlineColourHT, s1MidLineStyleHT)  //, "MID (" + tostring(s1MidLevel) + ")")
+        s1MidLabelHT := CreateTheLabelHT(levelHT=s1MidLevelHT, colourHT=s1MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(s1MidLevel) + ")")
+        s1MidLabelHT
+    if s2MidLineStyleHT != 'Hidden'
+        s2MidLineHT := CreateTheLineHT(s2MidLineHT, s2MidLevelHT, s2MidlineWgtHT, s2MidlineColourHT, s2MidLineStyleHT)  //, "MID (" + tostring(s2MidLevel) + ")")
+        s2MidLabelHT := CreateTheLabelHT(levelHT=s2MidLevelHT, colourHT=s2MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(s2MidLevel) + ")")
+        s2MidLabelHT
+    if s3MidLineStyleHT != 'Hidden'
+        s3MidLineHT := CreateTheLineHT(s3MidLineHT, s3MidLevelHT, s3MidlineWgtHT, s3MidlineColourHT, s3MidLineStyleHT)  //, "MID (" + tostring(s3MidLevel) + ")")
+        s3MidLabelHT := CreateTheLabelHT(levelHT=s3MidLevelHT, colourHT=s3MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(s3MidLevel) + ")")
+        s3MidLabelHT
+    if s4MidLineStyleHT != 'Hidden'
+        s4MidLineHT := CreateTheLineHT(s4MidLineHT, s4MidLevelHT, s4MidlineWgtHT, s4MidlineColourHT, s4MidLineStyleHT)  //, "MID (" + tostring(s4MidLevel) + ")")
+        s4MidLabelHT := CreateTheLabelHT(levelHT=s4MidLevelHT, colourHT=s4MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(s4MidLevel) + ")")
+        s4MidLabelHT
+    if s5MidLineStyleHT != 'Hidden'
+        s5MidLineHT := CreateTheLineHT(s5MidLineHT, s5MidLevelHT, s5MidlineWgtHT, s5MidlineColourHT, s5MidLineStyleHT)  //, "MID (" + tostring(s5MidLevel) + ")")
+        s5MidLabelHT := CreateTheLabelHT(levelHT=s5MidLevelHT, colourHT=s5MidlineColourHT, styleHT=label.style_none, labelTextHT='MID')  // (" + tostring(s3MidLevel) + ")")
+        s5MidLabelHT
+
+if not na(pLineHT) and line.get_x2(pLineHT) != bar_index
+    line.set_x2(r1LineHT, bar_index)
+    line.set_x2(pLineHT, bar_index)
+    line.set_x2(s1LineHT, bar_index)
+    line.set_x2(s1MidLineHT, bar_index)
+    line.set_x2(r1MidLineHT, bar_index)
+    line.set_x2(r2LineHT, bar_index)
+    line.set_x2(r3LineHT, bar_index)
+    line.set_x2(r4LineHT, bar_index)
+    line.set_x2(r5LineHT, bar_index)
+    line.set_x2(s2LineHT, bar_index)
+    line.set_x2(s3LineHT, bar_index)
+    line.set_x2(s4LineHT, bar_index)
+    line.set_x2(s5LineHT, bar_index)
+    line.set_x2(r2MidLineHT, bar_index)
+    line.set_x2(r3MidLineHT, bar_index)
+    line.set_x2(r4MidLineHT, bar_index)
+    line.set_x2(r5MidLineHT, bar_index)
+    line.set_x2(s2MidLineHT, bar_index)
+    line.set_x2(s3MidLineHT, bar_index)
+    line.set_x2(s4MidLineHT, bar_index)
+    line.set_x2(s5MidLineHT, bar_index)
+    if lblsOnRightHT  // if labels should be displayed on right, move to the location of the last bar.
+        label.set_x(pLabelHT, bar_index)
+        label.set_x(r1LabelHT, bar_index)
+        label.set_x(r2LabelHT, bar_index)
+        label.set_x(r3LabelHT, bar_index)
+        label.set_x(r4LabelHT, bar_index)
+        label.set_x(r5LabelHT, bar_index)
+        label.set_x(r1MidLabelHT, bar_index)
+        label.set_x(r2MidLabelHT, bar_index)
+        label.set_x(r3MidLabelHT, bar_index)
+        label.set_x(r4MidLabelHT, bar_index)
+        label.set_x(r5MidLabelHT, bar_index)
+        label.set_x(s1LabelHT, bar_index)
+        label.set_x(s2LabelHT, bar_index)
+        label.set_x(s3LabelHT, bar_index)
+        label.set_x(s4LabelHT, bar_index)
+        label.set_x(s5LabelHT, bar_index)
+        label.set_x(s1MidLabelHT, bar_index)
+        label.set_x(s2MidLabelHT, bar_index)
+        label.set_x(s3MidLabelHT, bar_index)
+        label.set_x(s4MidLabelHT, bar_index)
+        label.set_x(s5MidLabelHT, bar_index)
+
+// Get user input
+//rsiSource = input(title='RSI Source', defval=close)
+//rsiLength = input(title='RSI Length', defval=14)
+//rsiOverbought = input(title='RSI Overbought Level', defval=60)
+//rsiOversold = input(title='RSI Oversold Level', defval=40)
+ttmLow = input(title='TTM Low', defval=-1)
+ttmHigh = input(title='TTM High', defval=1)
+// Get RSI Value
+//rsiValue = ta.rsi(rsiSource, rsiLength)
+//isRsiOB = rsiValue >= rsiOverbought
+//isRsiOS = rsiValue <= rsiOversold
+// TTM SQUEEZE
+length = input.int(title='TTM Length', defval=20, minval=0)
+bband(length, mult) =>
+    ta.sma(close, length) + mult * ta.stdev(close, length)
+keltner(length, mult) =>
+    ta.ema(close, length) + mult * ta.ema(ta.tr, length)
+
+e1 = (ta.highest(high, length) + ta.lowest(low, length)) / 2 + ta.sma(close, length)
+osc = ta.linreg(close - e1 / 2, length, 0)
+diff = bband(length, 2) - keltner(length, 1)
+ttmL = osc < ttmLow and rsiValue <= rsiOversold
+ttmH = osc > ttmHigh and rsiValue >= rsiOverbought
+// Plot signals to chart
+
+plotshape(ttmH, title='Overbought', location=location.abovebar, color=color.new(color.red, 0), style=shape.arrowdown, size=size.auto)
+plotshape(ttmL, title='Oversold', location=location.belowbar, color=color.new(color.green, 0), style=shape.arrowup, size=size.auto)
